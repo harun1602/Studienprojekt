@@ -1,4 +1,5 @@
-Train: Train.txt
+train: Train.txt
+val: Val.txt
 names:
   0: Blue Module
   1: yellow module
