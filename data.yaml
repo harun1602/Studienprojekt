@@ -1,0 +1,13 @@
+Train: Train.txt
+names:
+  0: Blue Module
+  1: yellow module
+  2: Box
+  3: small gray module
+  4: gray orange module
+  5: groin
+  6: big gray module
+  7: 35mm
+  8: cable
+  9: black module
+path: .
