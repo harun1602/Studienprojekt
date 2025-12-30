@@ -1,229 +1,509 @@
+import os
 import time
+from collections import deque
+
 import cv2
-from ultralytics import YOLO
 import numpy as np
+from ultralytics import YOLO
 
-# =========================
-# Model
-# =========================
-model = YOLO("C:/Users/timan/Downloads/Studienprojekt-master/Studienprojekt-master/best.pt")
-cap = cv2.VideoCapture(0)
 
-last_log_time = time.time()
-LOG_INTERVAL = 3  # seconds
+# ============================================================
+# 1) CONFIG / PARAMETER
+# ============================================================
 
-# =========================
-# Groin detection
-# =========================
-def detect_groin(r, main_box, label="groin", threshold_px=15, color=(0, 215, 255), y_offset=0):
-    """
-    Detect and visualize the groin in the main coordinate system.
-    Draws a horizontal line across the groin boxes at their vertical middle (union of all detected groin boxes).
+# Ordner der aktuellen Datei (damit MODEL_PATH relativ gesetzt werden kann)
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    Args:
-        r: YOLO results object
-        main_box: Box coordinates (x1,y1,x2,y2) of main box
-        label: The label name of groin
-        threshold_px: allowed vertical deviation for zone visualization
-        color: BGR color for visualization
-        y_offset: pixel offset to move the groin line vertically (optional)
+# ⚠️ HIER anpassen: Pfad zu deinem trainierten YOLO-Modell
+MODEL_PATH = os.path.join(PROJECT_DIR, "runs", "detect", "train4", "weights", "best.pt")
 
-    Returns:
-        annotated_frame: frame with groin visualization
-        groin_line_coords: (x_start, y, x_end, y) of the horizontal line, or None if not detected
-    """
-    global annotated_frame
+# Kameraquelle (0 = Standard-Webcam, ggf. 1/2 oder RTSP/Dateipfad)
+CAMERA_INDEX = 0
 
-    mx1, my1, mx2, my2 = map(int, main_box.tolist())
+# YOLO Konfidenz-Threshold: Detections darunter werden ignoriert
+CONF_THRES = 0.5
 
-    groin_found = False
-    all_x1, all_x2 = [], []
-    all_y1, all_y2 = [], []
+# Inferenz-Auflösung für YOLO (Performance/Genauigkeit)
+IMGSZ = 640
 
-    if r.boxes is not None:
-        for box in r.boxes:
-            cls_id = int(box.cls[0])
-            obj_label = model.names[cls_id]
+# Welche Variante (Layout) soll geprüft werden?
+ACTIVE_VARIANT = "v2"  # "v1" / "v2" / "v3" / "v4"
 
-            if obj_label == label:
-                groin_found = True
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                all_x1.append(x1)
-                all_x2.append(x2)
-                all_y1.append(y1)
-                all_y2.append(y2)
+# ------------------------------------------------------------
+# Zonen-Definition:
+# Wir definieren "erlaubte Bereiche" (Bounding-Boxes) für Module
+# RELATIV zur Schiene. Schiene wird als Linie erkannt: (x_start, y, x_end, y)
+# - X-Zonen: 0..1 entlang der Schienenlänge (links->rechts)
+# - Y-Zone: Band um die Schienenhöhe (± Anteil der Box-Höhe)
+# ------------------------------------------------------------
 
-                conf = float(box.conf[0])
-                track_id = int(box.id[0]) if box.id is not None else -1
-                print(f"ID: {track_id} | Label: {obj_label} | Conf: {conf:.2f}")
+# Vertikale Toleranz um die Schiene:
+# Beispiel: 0.12 => Zone geht +/- 12% der Box-Höhe um die Schiene
+RAIL_BAND_HALFHEIGHT_NORM = 0.12
 
-    groin_line_coords = None
-    if groin_found:
-        # Horizontal line spans the union of all groin boxes
-        x_start = min(all_x1)
-        x_end = max(all_x2)
+# Prüfkriterium: Wie viel der Modulfläche muss in der Zone liegen?
+# 0.60 = mind. 60% der Modul-Bounding-Box muss innerhalb der erlaubten Zone sein.
+MIN_OVERLAP_RATIO = 0.60
 
-        # Vertical middle of all groin boxes + optional y_offset
-        y_middle = (min(all_y1) + max(all_y2)) // 2 
+# ------------------------------------------------------------
+# Groin-Line Stabilisierung:
+# Wir möchten NICHT "erste erkannte Groin-Line einfrieren", sondern:
+# - pro Frame neu bestimmen (falls vorhanden)
+# - sprunghafte Ausreißer verwerfen (MAX_JUMP_PX)
+# - glätten mit EMA (EMA_ALPHA)
+# - zusätzlich Median über History (HISTORY_LEN) als Robustheits-Backup
+# ------------------------------------------------------------
 
-        # Draw horizontal line
-        cv2.line(annotated_frame, (x_start, y_middle), (x_end, y_middle), (0, 255, 255), 2)
-        groin_line_coords = (x_start, y_middle, x_end, y_middle)
-    else:
-        print(f" {label.upper()} not detected")
+EMA_ALPHA = 0.35      # 0..1. Höher = reagiert schneller, niedriger = glatter
+MAX_JUMP_PX = 60      # wenn Y der Linie zu stark springt => verwerfen
+HISTORY_LEN = 7       # wie viele letzte Linien in Median-Filter einfließen
 
-    # Draw horizontal zone
-    zone_y1 = max(y_middle - threshold_px, my1) if groin_found else my1
-    zone_y2 = min(y_middle + threshold_px, my2) if groin_found else my2
-    overlay = annotated_frame.copy()
-    cv2.rectangle(overlay, (mx1, zone_y1), (mx2, zone_y2), color, -1)
-    alpha = 0.2
-    annotated_frame = cv2.addWeighted(overlay, alpha, annotated_frame, 1 - alpha, 0)
+# Logging / Konsolen-Ausgabe nur alle LOG_INTERVAL Sekunden
+LOG_INTERVAL = 3.0
 
-    return annotated_frame, groin_line_coords
 
-# =========================
-# Place and check modules (relative X)
-# =========================
-# =========================
-# Place and check modules (relative X) with colorized zones
-# =========================
-def place_modules_on_line(r, main_box, groin_line_coords, module_map):
-    """
-    Place modules along the groin line with allowed zones drawn as rectangles.
-    module_map = {
-        "label": (rel_x_start, rel_x_end, y_threshold)
+# ============================================================
+# 2) MODULE LAYOUTS (X-Zonen 0..1 entlang der Schiene)
+# ============================================================
+# Jede Zone ist (x_start_norm, x_end_norm) entlang der Schienenlänge.
+# Beispiel:
+#   (0.10, 0.22) bedeutet:
+#     - Zone startet bei 10% der Schienenlänge
+#     - Zone endet bei 22% der Schienenlänge
+#
+# Vorteil: unabhängig von Zoom/Abstand/Boxgröße -> immer relativ zur Schiene.
+
+margin = 0.1
+
+module_layouts_norm = {
+    "v1": {
+        "small gray module": tuple(np.clip([0.368 - margin, 0.388 + margin], 0.0, 1.0)),
+        "yellow module":     tuple(np.clip([0.388 - margin, 0.441 + margin], 0.0, 1.0)),
+        "Blue Module":       tuple(np.clip([0.441 - margin, 0.479 + margin], 0.0, 1.0)),
+        "big gray module":   tuple(np.clip([0.479 - margin, 0.519 + margin], 0.0, 1.0)),
+    },
+    "v2": {
+        "35mm":              tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
+        "small gray module": tuple(np.clip([0.847 - margin, 0.879 + margin], 0.0, 1.0)),
+        "yellow module":     tuple(np.clip([0.795 - margin, 0.861 + margin], 0.0, 1.0)),
+        "yellow module":     tuple(np.clip([0.736 - margin, 0.811 + margin], 0.0, 1.0)),
+        "big gray module":   tuple(np.clip([0.736 - margin, 0.811 + margin], 0.0, 1.0)),
+        "big gray module":   tuple(np.clip([0.736 - margin, 0.811 + margin], 0.0, 1.0)),
+        "35mm":              tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
+        "gray orange module":tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
+        "Blue Module":       tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
+        "gray orange module":tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
+        "Blue Module":       tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
+        "small gray module": tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0))
+    },
+    "v3": {
+        # TODO: eintragen
+    },
+    "v4": {
+        # TODO: eintragen
     }
-    The rectangle color is based on the module's "color name".
-    """
-    global annotated_frame
-    mx1, my1, mx2, my2 = map(int, main_box.tolist())
-    x_line_start, groin_y, x_line_end, _ = groin_line_coords
-
-    # Define colors per module (BGR)
-    color_map = {
-        "yellow module": (0, 255, 255),      # Yellow
-        "blue module": (255, 0, 0),          # Blue
-        "gray module": (128, 128, 128),      # Gray
-        "lightgray module": (128, 128, 128),     # alternate naming
-    }
-
-    for label, (rel_x_start, rel_x_end, y_thresh) in module_map.items():
-        zone_color = color_map.get(label, (128, 128, 255))  # fallback color
-
-        # Convert relative X to absolute on groin line
-        zone_x1 = x_line_start + rel_x_start
-        zone_x2 = x_line_start + rel_x_end
-        zone_y1 = max(groin_y - y_thresh, my1)
-        zone_y2 = min(groin_y + y_thresh, my2)
-
-        # Draw allowed zone rectangle
-        overlay = annotated_frame.copy()
-        cv2.rectangle(overlay, (zone_x1, zone_y1), (zone_x2, zone_y2), zone_color, -1)
-        alpha = 0.7
-        annotated_frame = cv2.addWeighted(overlay, alpha, annotated_frame, 1 - alpha, 0)
-
-        # Check if module is present and mark it
-        if r.boxes is not None:
-            for box in r.boxes:
-                cls_id = int(box.cls[0])
-                module_label = model.names[cls_id]
-                if module_label != label:
-                    continue
-
-                x1, _, x2, _ = map(int, box.xyxy[0])
-                module_center_x = (x1 + x2) // 2
-
-                if zone_x1 <= module_center_x <= zone_x2:
-                    status_color = (0, 255, 0)  # Green for correct
-                    status_text = "✅ CORRECTLY PLACED"
-                else:
-                    status_color = (0, 0, 255)  # Red for incorrect
-                    status_text = "❌ NOT IN PLACE"
-
-                # Draw marker
-                cv2.circle(annotated_frame, (module_center_x, groin_y), 7, status_color, -1)
-                cv2.putText(
-                    annotated_frame, f"{label}: {status_text}",
-                    (module_center_x + 5, groin_y - 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1
-                )
-                print(f"Module '{label}' at {module_center_x}, zone [{zone_x1}, {zone_x2}] -> {status_text}")
-
-    return annotated_frame
-
-
-# =========================
-# Module target positions (relative X)
-# =========================
-module_positions = {
-    "lightgray  module": (20, 30, 60),
-    "yellow module": (30, 55, 60),       
-    "blue module": (55, 80, 60),
-    "gray  module": (80, 105, 60)
 }
 
-# =========================
-# Main loop
-# =========================
-first_valid_groin_line = None
+# Farben pro Modul (OpenCV nutzt BGR)
+COLOR_MAP = {
+    "yellow module":     (0, 255, 255),
+    "Blue Module":       (255, 0, 0),
+    "big gray module":   (128, 128, 128),
+    "small gray module": (128, 128, 128),
+    "gray orange module": (128, 128, 128),
+    "35mm":              (0, 128, 128),
+}
+
+
+# ============================================================
+# 3) Model / Camera initialisieren
+# ============================================================
+model = YOLO(MODEL_PATH)
+cap = cv2.VideoCapture(CAMERA_INDEX)
+
+last_log_time = time.time()
+
+
+# ============================================================
+# 4) Zeichnen / Geometrie-Helfer
+# ============================================================
+
+def draw_transparent_rect(frame, x1, y1, x2, y2, color, alpha=0.35, thickness=2):
+    """
+    Zeichnet eine semi-transparente Box (Overlay) plus Rahmen.
+    """
+    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)  # gefüllt
+    out = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+    cv2.rectangle(out, (x1, y1), (x2, y2), color, thickness)  # Rahmen
+    return out
+
+
+def overlap_ratio(module_xyxy, zone_xyxy):
+    """
+    Intersection(module, zone) / Area(module)
+    -> Wie viel Prozent der Modulfläche liegt in der Zone?
+    """
+    mx1, my1, mx2, my2 = module_xyxy
+    zx1, zy1, zx2, zy2 = zone_xyxy
+
+    iw = max(0, min(mx2, zx2) - max(mx1, zx1))
+    ih = max(0, min(my2, zy2) - max(my1, zy1))
+    inter = iw * ih
+
+    m_area = max(0, mx2 - mx1) * max(0, my2 - my1)
+    return (inter / m_area) if m_area else 0.0
+
+
+def find_main_box(r):
+    """
+    Sucht die Detection mit Label "Box".
+    Gibt xyxy als Liste zurück oder None.
+    """
+    if r.boxes is None:
+        return None
+
+    for box in r.boxes:
+        cls_id = int(box.cls[0])
+        if model.names[cls_id] == "Box":
+            return box.xyxy[0].tolist()
+    return None
+
+
+def compute_groin_line(r, main_box, label="groin", y_offset=0):
+    """
+    Bestimmt die Schienenlinie aus allen Detections mit Label "groin".
+
+    Idee:
+    - Nimm alle groin-Boxes
+    - Bestimme:
+        x_start = min(x1)
+        x_end   = max(x2)
+        y_middle = Mitte aus min(y1) und max(y2)  (Union-Mitte)
+    - Ergebnis ist eine horizontale Linie:
+        (x_start, y_middle, x_end, y_middle)
+
+    Falls keine groin erkannt => None.
+    """
+    if r.boxes is None:
+        return None
+
+    mx1, my1, mx2, my2 = map(int, main_box)
+    xs1, xs2, ys1, ys2 = [], [], [], []
+    found = False
+
+    for box in r.boxes:
+        cls_id = int(box.cls[0])
+        obj_label = model.names[cls_id]
+        if obj_label != label:
+            continue
+
+        found = True
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        xs1.append(int(x1))
+        xs2.append(int(x2))
+        ys1.append(int(y1))
+        ys2.append(int(y2))
+
+    if not found:
+        return None
+
+    x_start = min(xs1)
+    x_end = max(xs2)
+
+    # Union-Mitte der groin-Boxes
+    y_middle = (min(ys1) + max(ys2)) // 2
+    y_middle = int(y_middle + y_offset)
+
+    # In Box clampen (sicherheitshalber)
+    y_middle = max(my1, min(my2, y_middle))
+
+    # sanity
+    if x_end <= x_start:
+        return None
+
+    return (x_start, y_middle, x_end, y_middle)
+
+
+def clamp_line_to_box(line, main_box):
+    """
+    Stellt sicher, dass Linienkoordinaten innerhalb der Box liegen.
+    """
+    x1, y, x2, _ = line
+    mx1, my1, mx2, my2 = map(int, main_box)
+
+    x1 = max(mx1, min(mx2, x1))
+    x2 = max(mx1, min(mx2, x2))
+    y  = max(my1, min(my2, y))
+
+    return (x1, y, x2, y)
+
+
+def update_smoothed_line(prev_line, new_line, alpha=0.35, max_jump_px=60):
+    """
+    EMA-Glättung + Ausreißerfilter:
+
+    - Wenn new_line None => prev_line behalten
+    - Wenn prev_line None => new_line übernehmen
+    - Wenn new Y zu stark springt => new verwerfen
+    - Sonst: EMA zwischen prev und new
+
+    Warum?
+    YOLO Detections schwanken, insbesondere wenn Objekt kurz falsch erkannt wird.
+    EMA macht die Linie stabiler.
+    """
+    if new_line is None:
+        return prev_line
+
+    if prev_line is None:
+        return new_line
+
+    px1, py, px2, _ = prev_line
+    nx1, ny, nx2, _ = new_line
+
+    # Sprung in y zu groß => vermutlich Fehl-Detection
+    if abs(ny - py) > max_jump_px:
+        return prev_line
+
+    # EMA
+    sx1 = int((1 - alpha) * px1 + alpha * nx1)
+    sy  = int((1 - alpha) * py  + alpha * ny)
+    sx2 = int((1 - alpha) * px2 + alpha * nx2)
+
+    if sx2 <= sx1:
+        return prev_line
+
+    return (sx1, sy, sx2, sy)
+
+
+def best_box_for_label(r, label):
+    """
+    Nimmt die best-konfidente Detection für ein bestimmtes Label.
+    (Falls mehrere vorhanden: wähle die mit größter conf)
+    """
+    if r.boxes is None:
+        return None
+
+    best = None
+    best_conf = -1.0
+    for box in r.boxes:
+        cls_id = int(box.cls[0])
+        if model.names[cls_id] != label:
+            continue
+
+        conf = float(box.conf[0]) if box.conf is not None else 0.0
+        if conf > best_conf:
+            best_conf = conf
+            best = box
+
+    return best
+
+
+def place_and_check_modules(frame, r, main_box, groin_line, module_map_norm,
+                            rail_band_halfheight_norm=0.12,
+                            min_overlap=0.60):
+    """
+    Zeichnet pro Modul eine erlaubte Zone und prüft, ob das erkannte Modul
+    überwiegend in dieser Zone liegt.
+
+    Zone-Berechnung:
+    - X: aus normiertem Bereich (0..1) entlang der Schienenlänge
+    - Y: Band um groin_y +/- (rail_band_halfheight_norm * Box-Höhe)
+
+    Bewertung:
+    - overlap_ratio >= min_overlap => OK, sonst WRONG
+    - Wenn Modul nicht gefunden => MISSING
+    """
+    mx1, my1, mx2, my2 = map(int, main_box)
+    x_start, groin_y, x_end, _ = groin_line
+
+    line_len = max(1, x_end - x_start)
+    box_h = max(1, my2 - my1)
+    y_band = int(rail_band_halfheight_norm * box_h)
+
+    for label, (x1n, x2n) in module_map_norm.items():
+        zone_color = COLOR_MAP.get(label, (128, 128, 255))
+
+        # Normierte X-Grenzen -> Pixel auf Schiene
+        zone_x1 = int(x_start + x1n * line_len)
+        zone_x2 = int(x_start + x2n * line_len)
+
+        # Band um Schienenhöhe
+        zone_y1 = max(my1, int(groin_y - y_band))
+        zone_y2 = min(my2, int(groin_y + y_band))
+
+        # Zone zeichnen
+        frame = draw_transparent_rect(frame, zone_x1, zone_y1, zone_x2, zone_y2, zone_color, alpha=0.35, thickness=2)
+        cv2.putText(frame, label, (zone_x1, max(0, zone_y1 - 6)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+        zone_xyxy = (zone_x1, zone_y1, zone_x2, zone_y2)
+
+        # Bestes Modul für dieses Label suchen
+        det = best_box_for_label(r, label)
+        if det is None:
+            cv2.putText(frame, "MISSING",
+                        (zone_x1, min(frame.shape[0]-5, zone_y2 + 18)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            continue
+
+        # Modulbox auslesen
+        x1, y1, x2, y2 = map(int, det.xyxy[0].tolist())
+        mod_xyxy = (x1, y1, x2, y2)
+
+        # Overlap prüfen
+        inside_ratio = overlap_ratio(mod_xyxy, zone_xyxy)
+        ok = inside_ratio >= min_overlap
+
+        status_color = (0, 255, 0) if ok else (0, 0, 255)
+        status_text = "OK" if ok else "WRONG"
+
+        # Marker am Modul
+        cx = (x1 + x2) // 2
+        cy = (y1 + y2) // 2
+        cv2.circle(frame, (cx, cy), 7, status_color, -1)
+        cv2.putText(frame, f"{status_text} ({inside_ratio:.2f})",
+                    (zone_x1, min(frame.shape[0]-5, zone_y2 + 18)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+
+    return frame
+
+
+# ============================================================
+# 5) MAIN LOOP
+# ============================================================
+
+# Hier halten wir eine "smoothed" Version der Schienenlinie
+groin_line_smoothed = None
+
+# History für Median-Glättung (robust gegen Ausreißer)
+groin_history = deque(maxlen=HISTORY_LEN)
 
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
 
-    results = model.track(frame, conf=0.5, imgsz=640, persist=True, verbose=False)
+    # YOLO tracking -> liefert r.boxes etc.
+    results = model.track(
+        frame,
+        conf=CONF_THRES,
+        imgsz=IMGSZ,
+        persist=True,
+        verbose=False
+    )
     r = results[0]
-    annotated_frame = r.plot()
 
-    main_box = None
-    if r.boxes is not None:
-        for box in r.boxes:
-            if model.names[int(box.cls[0])] == "Box":
-                main_box = box.xyxy[0]
-                break
+    # YOLO Standard-Plot (zeigt Detections + Labels)
+    annotated = r.plot()
 
+    # Box suchen (Hauptkoordinatensystem)
+    main_box = find_main_box(r)
     current_time = time.time()
 
-    # Logging every 3 seconds
-    if current_time - last_log_time >= LOG_INTERVAL:
-        print("\n--- SYSTEM CHECK ---")
-        if main_box is not None and first_valid_groin_line is None:
-            annotated_frame, groin_line_coords = detect_groin(
-                r, main_box, label="groin", threshold_px=15, color=(0, 215, 255), y_offset=20
-            )
-            if groin_line_coords is not None:
-                first_valid_groin_line = groin_line_coords
-        last_log_time = current_time
-
-    # Visualization: main box and axes
     if main_box is not None:
-        mx1, my1, mx2, my2 = map(int, main_box.tolist())
+        mx1, my1, mx2, my2 = map(int, main_box)
+        w = mx2 - mx1
+        h = my2 - my1
+
+        # ------------------------------------------
+        # A) Groin-Line pro Frame neu bestimmen
+        # ------------------------------------------
+        new_groin = compute_groin_line(r, main_box, label="groin", y_offset=0)
+
+        # Fallback:
+        # Wenn groin nicht erkannt wird, nehmen wir Box-Mitte als "Schiene",
+        # damit das System nicht komplett aussetzt.
+        if new_groin is None:
+            fallback_y = int(my1 + 0.5 * h)
+            new_groin = (mx1, fallback_y, mx2, fallback_y)
+
+        # Sicherstellen, dass Linie in der Box bleibt
+        new_groin = clamp_line_to_box(new_groin, main_box)
+
+        # ------------------------------------------
+        # B) Glätten + Ausreißer verwerfen
+        # ------------------------------------------
+        groin_line_smoothed = update_smoothed_line(
+            groin_line_smoothed,
+            new_groin,
+            alpha=EMA_ALPHA,
+            max_jump_px=MAX_JUMP_PX
+        )
+
+        # ------------------------------------------
+        # C) Extra Robustheit: Median aus den letzten Linien
+        # ------------------------------------------
+        if groin_line_smoothed is not None:
+            groin_history.append(groin_line_smoothed)
+
+            # Median pro Komponente (x_start, y, x_end)
+            xs1 = [g[0] for g in groin_history]
+            ys  = [g[1] for g in groin_history]
+            xs2 = [g[2] for g in groin_history]
+
+            med_x1 = int(np.median(xs1))
+            med_y  = int(np.median(ys))
+            med_x2 = int(np.median(xs2))
+
+            groin_line_smoothed = (med_x1, med_y, med_x2, med_y)
+
+        # ------------------------------------------
+        # D) Hauptbox + Achsen zeichnen (nur Anzeige)
+        # ------------------------------------------
         cx = (mx1 + mx2) // 2
         cy = (my1 + my2) // 2
 
-        cv2.rectangle(annotated_frame, (mx1, my1), (mx2, my2), (0, 0, 255), 3)
-        cv2.line(annotated_frame, (cx, my1), (cx, my2), (255, 0, 0), 2)
-        cv2.line(annotated_frame, (mx1, cy), (mx2, cy), (255, 0, 0), 2)
-        cv2.circle(annotated_frame, (cx, cy), 5, (255, 0, 0), -1)
-        cv2.putText(
-            annotated_frame,
-            "Main Coordinate System",
-            (mx1, my1 - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 0, 255),
-            2
-        )
+        cv2.rectangle(annotated, (mx1, my1), (mx2, my2), (0, 0, 255), 3)
+        cv2.line(annotated, (cx, my1), (cx, my2), (255, 0, 0), 2)
+        cv2.line(annotated, (mx1, cy), (mx2, cy), (255, 0, 0), 2)
+        cv2.circle(annotated, (cx, cy), 5, (255, 0, 0), -1)
 
-        # Draw first valid groin line and module zones
-        if first_valid_groin_line is not None:
-            x_start, groin_y, x_end, _ = first_valid_groin_line
-            cv2.line(annotated_frame, (x_start, groin_y), (x_end, groin_y), (0, 255, 255), 2)
-            annotated_frame = place_modules_on_line(r, main_box, first_valid_groin_line, module_positions)
+        cv2.putText(annotated, "Main Coordinate System",
+                    (mx1, max(0, my1 - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
-    cv2.imshow("YOLO Live Tracking + Groin Modular Zone", annotated_frame)
+        # ------------------------------------------
+        # E) Schiene + Modulzonen einzeichnen und prüfen
+        # ------------------------------------------
+        if groin_line_smoothed is not None:
+            x_start, gy, x_end, _ = groin_line_smoothed
+
+            # Schienenlinie zeichnen
+            cv2.line(annotated, (x_start, gy), (x_end, gy), (0, 255, 255), 2)
+
+            # Module anhand der aktiven Variante prüfen
+            module_positions = module_layouts_norm.get(ACTIVE_VARIANT, {})
+
+            annotated = place_and_check_modules(
+                annotated,
+                r,
+                main_box,
+                groin_line_smoothed,
+                module_positions,
+                rail_band_halfheight_norm=RAIL_BAND_HALFHEIGHT_NORM,
+                min_overlap=MIN_OVERLAP_RATIO
+            )
+
+    # ------------------------------------------
+    # F) Logging (alle LOG_INTERVAL Sekunden)
+    # ------------------------------------------
+    if current_time - last_log_time >= LOG_INTERVAL:
+        print("\n--- SYSTEM CHECK ---")
+        print(f"Box: {'OK' if main_box is not None else 'MISSING'}")
+        print(f"Variant: {ACTIVE_VARIANT}")
+        if groin_line_smoothed is not None:
+            print(f"Groin-Line: y={groin_line_smoothed[1]} x=[{groin_line_smoothed[0]}..{groin_line_smoothed[2]}]")
+        else:
+            print("Groin-Line: NONE")
+        last_log_time = current_time
+
+    # ------------------------------------------
+    # G) Anzeigen + Hotkeys
+    # ------------------------------------------
+    cv2.imshow("YOLO Live Tracking + Groin Modular Zone (relative)", annotated)
+
     key = cv2.waitKey(1) & 0xFF
     if key == ord("q"):
         break
