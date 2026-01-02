@@ -87,20 +87,50 @@ module_layouts_norm = {
         "small gray module": tuple(np.clip([0.847 - margin, 0.879 + margin], 0.0, 1.0)),
         "yellow module":     tuple(np.clip([0.795 - margin, 0.861 + margin], 0.0, 1.0)),
         "yellow module":     tuple(np.clip([0.736 - margin, 0.811 + margin], 0.0, 1.0)),
-        "big gray module":   tuple(np.clip([0.736 - margin, 0.811 + margin], 0.0, 1.0)),
-        "big gray module":   tuple(np.clip([0.736 - margin, 0.811 + margin], 0.0, 1.0)),
-        "35mm":              tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
-        "gray orange module":tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
-        "Blue Module":       tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
-        "gray orange module":tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
-        "Blue Module":       tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0)),
-        "small gray module": tuple(np.clip([0.872 - margin, 1.00 + margin], 0.0, 1.0))
+        "big gray module":   tuple(np.clip([0.700 - margin, 0.743 + margin], 0.0, 1.0)),
+        "big gray module":   tuple(np.clip([0.661 - margin, 0.700 + margin], 0.0, 1.0)),
+        "35mm":              tuple(np.clip([0.511 - margin, 0.661 + margin], 0.0, 1.0)),
+        "gray orange module":tuple(np.clip([0.477 - margin, 0.511 + margin], 0.0, 1.0)),
+        "Blue Module":       tuple(np.clip([0.431 - margin, 0.477 + margin], 0.0, 1.0)),
+        "gray orange module":tuple(np.clip([0.386 - margin, 0.431 + margin], 0.0, 1.0)),
+        "Blue Module":       tuple(np.clip([0.338 - margin, 0.383 + margin], 0.0, 1.0)),
+        "small gray module": tuple(np.clip([0.321 - margin, 0.342 + margin], 0.0, 1.0))
     },
     "v3": {
-        # TODO: eintragen
+        "35mm":                 tuple(np.clip([0.000 - margin, 0.126 + margin], 0.0, 1.0)),
+        "small gray module":    tuple(np.clip([0.126 - margin, 0.162 + margin], 0.0, 1.0)),
+        "Blue Module":          tuple(np.clip([0.146 - margin, 0.201 + margin], 0.0, 1.0)),
+        "big gray module":      tuple(np.clip([0.199 - margin, 0.243 + margin], 0.0, 1.0)),
+        "yellow module":        tuple(np.clip([0.225 - margin, 0.290 + margin], 0.0, 1.0)),
+        "black module":         tuple(np.clip([0.280 - margin, 0.515 + margin], 0.0, 1.0)),
+        "Blue Module":          tuple(np.clip([0.515 - margin, 0.549 + margin], 0.0, 1.0)),
+        "yellow module":        tuple(np.clip([0.549 - margin, 0.609 + margin], 0.0, 1.0)),
+        "Blue Module":          tuple(np.clip([0.609 - margin, 0.642 + margin], 0.0, 1.0)),
+        "yellow module":        tuple(np.clip([0.642 - margin, 0.704 + margin], 0.0, 1.0)),
+        "gray orange module":   tuple(np.clip([0.704 - margin, 0.748 + margin], 0.0, 1.0)),
+        "gray orange module":   tuple(np.clip([0.748 - margin, 0.781 + margin], 0.0, 1.0)),
+        "gray orange module":   tuple(np.clip([0.781 - margin, 0.828 + margin], 0.0, 1.0))
     },
     "v4": {
-        # TODO: eintragen
+        "12.5mm": tuple(np.clip([0.000 - margin, 0.048 + margin], 0.0, 1.0)),
+        "small gray module": tuple(np.clip([0.033 - margin, 0.069 + margin], 0.0, 1.0)),
+        "big gray module": tuple(np.clip([0.072 - margin, 0.122 + margin], 0.0, 1.0)),
+        "yellow module": tuple(np.clip([0.108 - margin, 0.183 + margin], 0.0, 1.0)),
+        "gray orange module": tuple(np.clip([0.171 - margin, 0.216 + margin], 0.0, 1.0)),
+        "Blue Module": tuple(np.clip([0.207 - margin, 0.250 + margin], 0.0, 1.0)),
+        "gray orange module": tuple(np.clip([0.240 - margin, 0.290 + margin], 0.0, 1.0)),
+        "yellow module": tuple(np.clip([0.275 - margin, 0.333 + margin], 0.0, 1.0)),
+        "yellow module": tuple(np.clip([0.326 - margin, 0.390 + margin], 0.0, 1.0)),
+        "big gray module": tuple(np.clip([0.390 - margin, 0.431 + margin], 0.0, 1.0)),
+        "gray orange module": tuple(np.clip([0.431 - margin, 0.464 + margin], 0.0, 1.0)),
+        "Blue Module": tuple(np.clip([0.470 - margin, 0.514 + margin], 0.0, 1.0)),
+        "big gray module": tuple(np.clip([0.512 - margin, 0.551 + margin], 0.0, 1.0)),
+        "black module": tuple(np.clip([0.551 - margin, 0.782 + margin], 0.0, 1.0)),
+        "yellow module": tuple(np.clip([0.789 - margin, 0.852 + margin], 0.0, 1.0)),
+        "Blue Module": tuple(np.clip([0.842 - margin, 0.886 + margin], 0.0, 1.0)),
+        "Blue Module": tuple(np.clip([0.875 - margin, 0.935 + margin], 0.0, 1.0)),
+        "big gray module": tuple(np.clip([0.923 - margin, 0.970 + margin], 0.0, 1.0)),
+        "small gray module": tuple(np.clip([0.959 - margin, 0.988 + margin], 0.0, 1.0))
     }
 }
 
@@ -110,8 +140,9 @@ COLOR_MAP = {
     "Blue Module":       (255, 0, 0),
     "big gray module":   (128, 128, 128),
     "small gray module": (128, 128, 128),
-    "gray orange module": (128, 128, 128),
+    "gray orange module":(128, 128, 128),
     "35mm":              (0, 128, 128),
+    "black module":      (0, 0, 0),
 }
 
 
