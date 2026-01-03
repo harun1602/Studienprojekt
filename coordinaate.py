@@ -15,7 +15,7 @@ from ultralytics import YOLO
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ⚠️ HIER anpassen: Pfad zu deinem trainierten YOLO-Modell
-MODEL_PATH = os.path.join(PROJECT_DIR, "runs", "detect", "train4", "weights", "best.pt")
+MODEL_PATH = os.path.join(PROJECT_DIR,  "best.pt")
 
 # Kameraquelle (0 = Standard-Webcam, ggf. 1/2 oder RTSP/Dateipfad)
 CAMERA_INDEX = 0
@@ -27,7 +27,7 @@ CONF_THRES = 0.5
 IMGSZ = 640
 
 # Welche Variante (Layout) soll geprüft werden?
-ACTIVE_VARIANT = "v2"  # "v1" / "v2" / "v3" / "v4"
+ACTIVE_VARIANT = "v1"  # "v1" / "v2" / "v3" / "v4"
 
 # ------------------------------------------------------------
 # Zonen-Definition:
@@ -73,7 +73,7 @@ LOG_INTERVAL = 3.0
 #
 # Vorteil: unabhängig von Zoom/Abstand/Boxgröße -> immer relativ zur Schiene.
 
-margin = 0.1
+margin = 0.02
 
 module_layouts_norm = {
     "v1": {
