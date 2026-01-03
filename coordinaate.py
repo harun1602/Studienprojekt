@@ -18,7 +18,7 @@ CAMERA_INDEX = 0
 CONF_THRES = 0.5
 IMGSZ = 640
 
-ACTIVE_VARIANT = "v2"
+ACTIVE_VARIANT = "v1"
 
 RAIL_BAND_HALFHEIGHT_NORM = 0.12
 MIN_OVERLAP_RATIO = 0.60
@@ -39,21 +39,64 @@ STEP_CONFIRM_FRAMES = 5   # wie viele Frames OK nötig sind
 margin = 0.02
 
 module_layouts = {
+    "v1": [
+        {"id":0,"label":"small gray module","x":(0.368-margin,0.388+margin)},
+        {"id":1,"label":"yellow module","x":(0.388-margin,0.441+margin)},
+        {"id":2,"label":"Blue Module","x":(0.441-margin,0.479+margin)},
+        {"id":3,"label":"big gray module","x":(0.479-margin,0.519+margin)},
+    ],
     "v2": [
-        {"id": 0, "label": "35mm",               "x": (0.872-margin, 1.00+margin)},
-        {"id": 1, "label": "small gray module",  "x": (0.847-margin, 0.879+margin)},
-        {"id": 2, "label": "yellow module",      "x": (0.795-margin, 0.861+margin)},
-        {"id": 3, "label": "yellow module",      "x": (0.736-margin, 0.811+margin)},
-        {"id": 4, "label": "big gray module",    "x": (0.700-margin, 0.743+margin)},
-        {"id": 5, "label": "big gray module",    "x": (0.661-margin, 0.700+margin)},
-        {"id": 6, "label": "35mm",               "x": (0.511-margin, 0.661+margin)},
-        {"id": 7, "label": "gray orange module", "x": (0.477-margin, 0.511+margin)},
-        {"id": 8, "label": "Blue Module",        "x": (0.431-margin, 0.477+margin)},
-        {"id": 9, "label": "gray orange module", "x": (0.386-margin, 0.431+margin)},
-        {"id":10, "label": "Blue Module",        "x": (0.338-margin, 0.383+margin)},
-        {"id":11, "label": "small gray module",  "x": (0.321-margin, 0.342+margin)},
+        {"id":0,"label":"35mm","x":(0.872-margin,1.00+margin)},
+        {"id":1,"label":"small gray module","x":(0.847-margin,0.879+margin)},
+        {"id":2,"label":"yellow module","x":(0.795-margin,0.861+margin)},
+        {"id":3,"label":"yellow module","x":(0.736-margin,0.811+margin)},
+        {"id":4,"label":"big gray module","x":(0.700-margin,0.743+margin)},
+        {"id":5,"label":"big gray module","x":(0.661-margin,0.700+margin)},
+        {"id":6,"label":"35mm","x":(0.511-margin,0.661+margin)},
+        {"id":7,"label":"gray orange module","x":(0.477-margin,0.511+margin)},
+        {"id":8,"label":"Blue Module","x":(0.431-margin,0.477+margin)},
+        {"id":9,"label":"gray orange module","x":(0.386-margin,0.431+margin)},
+        {"id":10,"label":"Blue Module","x":(0.338-margin,0.383+margin)},
+        {"id":11,"label":"small gray module","x":(0.321-margin,0.342+margin)}
+    ],
+    "v3": [
+        {"id":0,"label":"35mm","x":(0.0-margin,0.126+margin)},
+        {"id":1,"label":"small gray module","x":(0.126-margin,0.162+margin)},
+        {"id":2,"label":"Blue Module","x":(0.146-margin,0.201+margin)},
+        {"id":3,"label":"big gray module","x":(0.199-margin,0.243+margin)},
+        {"id":4,"label":"yellow module","x":(0.225-margin,0.290+margin)},
+        {"id":5,"label":"black module","x":(0.280-margin,0.515+margin)},
+        {"id":6,"label":"Blue Module","x":(0.515-margin,0.549+margin)},
+        {"id":7,"label":"yellow module","x":(0.549-margin,0.609+margin)},
+        {"id":8,"label":"Blue Module","x":(0.609-margin,0.642+margin)},
+        {"id":9,"label":"yellow module","x":(0.642-margin,0.704+margin)},
+        {"id":10,"label":"gray orange module","x":(0.704-margin,0.748+margin)},
+        {"id":11,"label":"gray orange module","x":(0.748-margin,0.781+margin)},
+        {"id":12,"label":"gray orange module","x":(0.781-margin,0.828+margin)}
+    ],
+    "v4": [
+        {"id":0,"label":"12.5mm","x":(0.0-margin,0.048+margin)},
+        {"id":1,"label":"small gray module","x":(0.033-margin,0.069+margin)},
+        {"id":2,"label":"big gray module","x":(0.072-margin,0.122+margin)},
+        {"id":3,"label":"yellow module","x":(0.108-margin,0.183+margin)},
+        {"id":4,"label":"gray orange module","x":(0.171-margin,0.216+margin)},
+        {"id":5,"label":"Blue Module","x":(0.207-margin,0.250+margin)},
+        {"id":6,"label":"gray orange module","x":(0.240-margin,0.290+margin)},
+        {"id":7,"label":"yellow module","x":(0.275-margin,0.333+margin)},
+        {"id":8,"label":"yellow module","x":(0.326-margin,0.390+margin)},
+        {"id":9,"label":"big gray module","x":(0.390-margin,0.431+margin)},
+        {"id":10,"label":"gray orange module","x":(0.431-margin,0.464+margin)},
+        {"id":11,"label":"Blue Module","x":(0.470-margin,0.514+margin)},
+        {"id":12,"label":"big gray module","x":(0.512-margin,0.551+margin)},
+        {"id":13,"label":"black module","x":(0.551-margin,0.782+margin)},
+        {"id":14,"label":"yellow module","x":(0.789-margin,0.852+margin)},
+        {"id":15,"label":"Blue Module","x":(0.842-margin,0.886+margin)},
+        {"id":16,"label":"Blue Module","x":(0.875-margin,0.935+margin)},
+        {"id":17,"label":"big gray module","x":(0.923-margin,0.970+margin)},
+        {"id":18,"label":"small gray module","x":(0.959-margin,0.988+margin)}
     ]
 }
+
 
 
 COLOR_MAP = {
