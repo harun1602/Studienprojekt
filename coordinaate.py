@@ -1,3 +1,4 @@
+import os
 import time
 import cv2
 from ultralytics import YOLO
@@ -6,7 +7,9 @@ import numpy as np
 # =========================
 # Model
 # =========================
-model = YOLO("C:/Users/timan/Downloads/Studienprojekt-master/Studienprojekt-master/best.pt")
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(PROJECT_DIR, "best.pt")
+model = YOLO(MODEL_PATH)
 cap = cv2.VideoCapture(0)
 
 last_log_time = time.time()
