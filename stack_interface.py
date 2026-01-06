@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 from collections import deque
 
@@ -230,6 +231,7 @@ class StackChecker:
         return self.current_step >= len(self.module_layouts[self.active_variant])
 
     def check(self):
+        step_ready = False
         ret, frame = self.cap.read()
         if not ret:
             return None
@@ -257,25 +259,49 @@ class StackChecker:
                     if ok:
                         self.step_ok_counter += 1
                         if self.step_ok_counter >= self.STEP_CONFIRM_FRAMES:
-                            self.next_step()
+                            step_ready = True
                     else:
                         self.step_ok_counter = 0
-        return annotated
+        return annotated, step_ready
 
     def release(self):
         self.cap.release()
         cv2.destroyAllWindows()
 
+
+
 checker = StackChecker("newbest.pt")
 checker.set_variant('v1')
-checker.next_step()
+
+
+def console_listener():
+    """
+    Wartet auf Konsolen-Eingaben.
+    Bei 'n' + Enter wird next_step() aufgerufen.
+    Bei 'q' + Enter wird das Programm beendet.
+    """
+    while not checker.is_done():
+        cmd = input().strip().lower()
+        if cmd == "n":
+            print("➡️ next_step()")
+            checker.next_step()
+        elif cmd == "q":
+            print("❌ Abbruch durch Konsole")
+            break
+
+
+# Thread für Konsolen-Eingabe starten
+threading.Thread(target=console_listener, daemon=True).start()
+
 
 while not checker.is_done():
-    frame = checker.check()
+    frame, step_ready = checker.check()
     if frame is not None:
         cv2.imshow("STACK CHECK", frame)
+
+        # OpenCV-Fenster weiterhin bedienbar
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-checker.release()
+#checker.release()
 
