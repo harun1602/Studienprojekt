@@ -84,40 +84,80 @@ class StackChecker:
                      "band": 0.22, "y_offset_norm": 0., "y_offset_px": 0}
                 ]},
                 {"id": 3, "min_overlap": 0.90, "items": [
-                    {"label": "small gray module", "x": (0.80, 0.83),
-                     "band": 0.142, "y_offset_norm": 0, "y_offset_px": 0}
+                    {"label": "small gray module", "x": (0.80, 0.84),
+                     "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 4, "min_overlap": 0.90, "items": [
                     {"label": "yellow module", "x": (0.76, 0.82),
                      "band": 0.2, "y_offset_norm": 0, "y_offset_px": 0}
                 ]},
                 {"id": 5, "min_overlap": 0.90, "items": [
-                    {"label": "yellow module", "x": (0.706, 0.766),
+                    {"label": "yellow module", "x": (0.7, 0.77),
                      "band": 0.2, "y_offset_norm": 0, "y_offset_px": 0}
                 ]},
                 {"id": 6, "min_overlap": 0.90, "items": [
-                    {"label": "big gray module", "x": (0.671, 0.709),
+                    {"label": "big gray module", "x": (0.66, 0.72),
                      "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 7, "min_overlap": 0.90, "items": [
-                    {"label": "big gray module", "x": (0.635, 0.675),
+                    {"label": "big gray module", "x": (0.63, 0.68),
                      "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 8, "min_overlap": 0.90, "items": [
-                    {"label": "35mm", "x": (0.5, 0.64),
+                    {"label": "35mm", "x": (0.5, 0.65),
                      "band": 0.22, "y_offset_norm": 0, "y_offset_px": 0}
                 ]},
                 {"id": 9, "min_overlap": 0.90, "items": [
-                    {"label": "gray orange module", "x": (0.47, 0.508),
+                    {"label": "gray orange module", "x": (0.47, 0.52),
                      "band": 0.23, "y_offset_norm": -0.03, "y_offset_px": 0}
                 ]},
                 {"id": 10, "min_overlap": 0.90, "items": [
-                    {"label": "Blue Module", "x": (0.43, 0.47),
+                    {"label": "Blue Module", "x": (0.42, 0.48),
                      "band": 0.23, "y_offset_norm": -0.03, "y_offset_px": 0}
                 ]},
                 {"id": 11, "min_overlap": 0.90, "items": [
-                    {"label": "gray orange module", "x": (0.39, 0.43),
+                    {"label": "gray orange module", "x": (0.39, 0.44),
                      "band": 0.23, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 12, "min_overlap": 0.90, "items": [
+                    {"label": "Blue Module", "x": (0.36, 0.4),
+                     "band": 0.23, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 13, "min_overlap": 0.90, "items": [
+                    {"label": "small gray module", "x": (0.335, 0.38),
+                     "band": 0.16, "y_offset_norm": 0.03, "y_offset_px": 0}
+                ]},
+                {"id": 14, "min_overlap": 0.90, "items": [
+                    {"label": "blue module cable", "x": (0.36, 0.4),
+                     "band": 0.04, "y_offset_norm": -0.22, "y_offset_px": 0}
+                ]},
+                {"id": 15, "min_overlap": 0.90, "items": [
+                    {"label": "blue module cable", "x": (0.43, 0.48),
+                     "band": 0.04, "y_offset_norm": -0.22, "y_offset_px": 0}
+                ]},
+                {"id": 16, "min_overlap": 0.90, "items": [
+                    {"label": "grey module cable", "x": (0.47, 0.52),
+                     "band": 0.05, "y_offset_norm": 0.07, "y_offset_px": 0}
+                ]},
+                {"id": 17, "min_overlap": 0.90, "items": [
+                    {"label": "blue module cable", "x": (0.43, 0.48),
+                     "band": 0.05, "y_offset_norm": 0.07, "y_offset_px": 0}
+                ]},
+                {"id": 18, "min_overlap": 0.90, "items": [
+                    {"label": "yellow module cable", "x": (0.7, 0.77),
+                     "band": 0.04, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 19, "min_overlap": 0.90, "items": [
+                    {"label": "blue module cable", "x": (0.36, 0.4),
+                     "band": 0.04, "y_offset_norm": 0.07, "y_offset_px": 0}
+                ]},
+                {"id": 20, "min_overlap": 0.90, "items": [
+                    {"label": "yellow module cable", "x": (0.7, 0.77),
+                     "band": 0.04, "y_offset_norm": 0.03, "y_offset_px": 0}
+                ]},
+                {"id": 21, "min_overlap": 0.90, "items": [
+                    {"label": "grey module cable", "x": (0.76, 0.82),
+                     "band": 0.05, "y_offset_norm": 0.03, "y_offset_px": 0}
                 ]},
             ]
         }
