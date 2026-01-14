@@ -1,6 +1,6 @@
+from pathlib import Path
 import threading
 from datetime import datetime
-import random
 import streamlit as st
 import pandas as pd
 from data.database_code import TaskProfile, Version, ComponentList, ComponentListRequiredCount, TaskComponentRequirement
@@ -11,6 +11,9 @@ from navigation import make_sidebar
 from data.database_code import session
 
 from streamlit.runtime.scriptrunner import add_script_run_ctx
+
+import cv2
+from Recognition.stack_interface import StackChecker
 
 # Skript zur Logik und Darstellung des Arbeitslatzes
 
@@ -91,6 +94,82 @@ def arbeitsplatz_page():
         if st.button("Zurücksetzen"):
             reset_page()
             st.rerun()
+    #Dialog, Wenn Modul nicht erkannt ist
+    @st.dialog("Modul wurde nicht erkannt")
+    def confirm_missing_module_dialog():
+        st.warning("Modul wurde nicht erkannt. Wollen Sie trotzdem fortfahren?")
+
+        col_yes, spacer, col_no = st.columns([1, 1.5, 1])
+        with col_yes:
+            if st.button("Ja, fortfahren",width="stretch"):
+                st.session_state.confirm_missing_module = False
+                st.session_state.force_advance = True
+                st.rerun()
+
+        with col_no:
+            if st.button("Nein",width="stretch"):
+                st.session_state.confirm_missing_module = False
+                st.rerun()
+    @st.dialog("Bauteil-Vorschau")
+    def component_dialog():
+        comp = st.session_state.selected_component
+        if not comp:
+            st.info("Kein Bauteil ausgewählt.")
+            return
+
+        st.write(f"**{comp['name']}**  \nAnzahl: **{comp['count']}**")
+
+        from PIL import Image, ImageOps
+
+        path = comp.get("image_path")
+        if path:
+            img = Image.open(path)
+            img = ImageOps.exif_transpose(img)  # <-- korrigiert die EXIF-Drehung
+            st.image(img, width="stretch")
+        else:
+            st.warning("Kein Bild für dieses Bauteil vorhanden.")
+
+
+        spacer, col = st.columns([8, 3])
+        with col:
+            if st.button("Schließen", width="stretch"):
+                st.session_state.show_component_dialog = False
+                st.session_state.last_selected_component = None
+                st.session_state.components_table_nonce += 1  # <-- Tabelle neu “mounten”
+                st.rerun()
+
+    def start_stack_cam():
+        """Startet StackChecker + Kamera (wird bei Task-Start aufgerufen)."""
+        if st.session_state.stack_checker is None:
+            # Modellpfad ggf. aus Setting ziehen, sonst Default
+            model_path = get_setting("yolo_model_path", "best.pt")
+            
+            MODEL_PATH = Path(__file__).resolve().parents[1] / "Recognition" / "best.pt"
+            st.session_state.stack_checker = StackChecker( model_path=MODEL_PATH)
+
+        # Variante setzen (optional – Beispiel: Versionname enthält 'v2')
+        try:
+            vname = (st.session_state.selected_version or "").lower()
+            variant = "v2" if "v2" in vname else "v1"
+            st.session_state.stack_variant = variant
+            st.session_state.stack_checker.set_variant(variant)
+        except Exception:
+            pass
+
+        st.session_state.stack_cam_running = True
+    def stop_stack_cam():
+        """Stoppt Kamera/Checker sauber (wird bei Task-Ende aufgerufen)."""
+        chk = st.session_state.stack_checker
+        if chk is not None:
+            try:
+                chk.release()
+            except Exception:
+                pass
+
+        st.session_state.stack_checker = None
+        st.session_state.stack_cam_running = False
+        st.session_state.arbeitsplatz_stack_step_ready = False
+
 
     # ----- Nachfolgenden werden die session-states definiert, welche für das korrekte beibehalten von Informationen/Variablenzuständen über Seiten-Aktualisierungen (also alle Operationen die einen refresh triggern -> bspw Button-Drücken) hinweg benötigt werden
     # Session State für Timer
@@ -162,6 +241,40 @@ def arbeitsplatz_page():
     # State zum Speichern, ob ein zufälliger Spielmodus ausgewählt werden soll
     if 'random_mode' not in st.session_state:
         st.session_state.random_mode = False
+    
+    if "confirm_missing_module" not in st.session_state:
+        st.session_state.confirm_missing_module = False
+
+    if "force_advance" not in st.session_state:
+        st.session_state.force_advance = False
+    if "show_component_dialog" not in st.session_state:
+        st.session_state.show_component_dialog = False
+    if "selected_component" not in st.session_state:
+        st.session_state.selected_component = None
+    if "last_selected_component" not in st.session_state:
+        st.session_state.last_selected_component = None
+    if "components_table_nonce" not in st.session_state:
+        st.session_state.components_table_nonce = 0
+
+    if "timer_start_ts" not in st.session_state:
+       st.session_state.timer_start_ts = None
+
+    if "countdown_end_ts" not in st.session_state:
+        st.session_state.countdown_end_ts = None
+
+    # --- Stack / Livecam States ---
+    if "stack_checker" not in st.session_state:
+        st.session_state.stack_checker = None
+
+    if "stack_cam_running" not in st.session_state:
+        st.session_state.stack_cam_running = False
+
+    if "arbeitsplatz_stack_step_ready" not in st.session_state:
+        st.session_state.arbeitsplatz_stack_step_ready = False
+    
+    if "stack_variant" not in st.session_state:
+        st.session_state.stack_variant = "v1"
+
 
     # Game_Modes
     modes = ["classic", "timer", "countdown"]
@@ -316,6 +429,17 @@ def arbeitsplatz_page():
                     # Wenn die Datenstruktur leer ist -> Fehler
                     else:
                         st.error("Beim laden der benötigten Aufgaben ist ein Fehler aufgetreten")
+                
+                with st.container(border=True):
+
+                    # Erledigte Aufgaben anzeigen
+                    st.subheader("Erledigte Aufgaben (aktuelle Sitzung)")
+                    if 'completed_tasks' in st.session_state and st.session_state.completed_tasks != []:
+                        for task in st.session_state.completed_tasks:
+                            st.write(f"{task['version_name']}: {task['time']:.2f} Sekunden")
+                    else:
+                        st.write("Keine erledigten Aufgaben gefunden")
+                
 
             # Anleitung und Start/Ende - Buttons
             with col2:
@@ -413,24 +537,29 @@ def arbeitsplatz_page():
 
                                             # Starte Timer
                                             if st.session_state.timer_thread is None or not st.session_state.timer_thread.is_alive():
-                                                st.session_state.timer_running.set()  # Timer starten
-                                                st.session_state.timer_thread = threading.Thread(target=timer, args=(
-                                                    st.session_state.timer_running,))
-                                                add_script_run_ctx(st.session_state.timer_thread)
-                                                st.session_state.timer_thread.start()
+                                                # st.session_state.timer_running.set()  # Timer starten
+                                                # st.session_state.timer_thread = threading.Thread(target=timer, args=(
+                                                #     st.session_state.timer_running,))
+                                                # add_script_run_ctx(st.session_state.timer_thread)
+                                                # st.session_state.timer_thread.start()
+                                                st.session_state.timer_running.set()
+                                                st.session_state.timer_start_ts = time.time()   
 
                                         # Falls Spielmodus 'countdown'
                                         if st.session_state.game_mode == 'countdown':
 
                                             # Starte Countdown
                                             if st.session_state.countdown_thread is None or not st.session_state.countdown_thread.is_alive():
-                                                st.session_state.countdown_running.set()  # Countdown starten
-                                                version = session.query(Version).filter_by(
-                                                    name=st.session_state.selected_version).first()
-                                                st.session_state.countdown_thread = threading.Thread(target=countdown, args=(version.time_limit,
-                                                    st.session_state.countdown_running,))
-                                                add_script_run_ctx(st.session_state.countdown_thread)
-                                                st.session_state.countdown_thread.start()
+                                                # st.session_state.countdown_running.set()  # Countdown starten
+                                                # version = session.query(Version).filter_by(
+                                                #     name=st.session_state.selected_version).first()
+                                                # st.session_state.countdown_thread = threading.Thread(target=countdown, args=(version.time_limit,
+                                                #     st.session_state.countdown_running,))
+                                                # add_script_run_ctx(st.session_state.countdown_thread)
+                                                # st.session_state.countdown_thread.start()
+                                                st.session_state.countdown_running.set()
+                                                st.session_state.countdown_end_ts = time.time() + version.time_limit
+                                                st.session_state.time_left = version.time_limit
 
                                         # Ziehen der aktuellen Version
                                         version = session.query(Version).filter_by(name=st.session_state.selected_version).first()
@@ -449,6 +578,8 @@ def arbeitsplatz_page():
 
                                             st.session_state.current_task = new_task
 
+                                            start_stack_cam()
+
                                             with col2_2_1:
                                                 # Ausgabe, dass der Timer läuft
                                                 st.success(f"Task '{version.name}' gestartet! Timer läuft...")
@@ -464,161 +595,189 @@ def arbeitsplatz_page():
                                         status_placeholder.success("Timer läuft...")
 
                             with col2_3:
+                                def advance_step_or_finish():
+                                    # Wenn es sich nicht um den letzten Montage-Schritt handelt
+                                    if st.session_state.current_step < len(st.session_state.image_paths) - 1:
 
+                                        with col2_2_2:
+                                            st.success("Montageschritt abgeschlossen. Bitte beginn unverzüglich mit dem nächsten Schritt. Der timer läuft weiter")
+
+                                        # Erfasse Endzeit für den aktuellen Schritt
+                                        end_time = datetime.now()
+                                        if st.session_state.current_step >= 0:
+                                            previous_step = st.session_state.steps_times[len(st.session_state.steps_times) - 1]
+                                            previous_step["end_time"] = end_time
+                                            previous_step["time_spent"] = (end_time - previous_step["start_time"]).total_seconds()
+
+                                        # Starte den nächsten Schritt
+                                        st.session_state.steps_times.append({"start_time": end_time})
+                                        st.session_state.current_step += 1
+
+                                        # >>> StackChecker Step mitziehen
+                                        if st.session_state.stack_checker is not None:
+                                            try:
+                                                st.session_state.stack_checker.next_step()
+                                            except Exception:
+                                                pass
+
+
+                                        time.sleep(time_between_tasks)
+                                        st.rerun()
+
+                                    # Wenn es sich um den letzten Montageschritt handelt
+                                    else:
+
+                                        if st.session_state.game_mode == "timer":
+                                            st.session_state.timer_running.clear()  # Timer stoppen
+                                            
+
+                                        if st.session_state.game_mode == "countdown":
+                                            st.session_state.countdown_running.clear()  # Countdown stoppen
+
+                                        # Ende Zeit der gesamten Aufgabe bestimmen + benötigte Zeit
+                                        end_time = datetime.now()
+                                        elapsed_time = (end_time - st.session_state.start_time).total_seconds()
+                                        task = st.session_state.current_task
+                                        task.end_timestamp = end_time
+                                        task.time = elapsed_time
+                                        session.commit()
+
+                                        # Letzter Eintrag wird gefüllt
+                                        st.session_state.steps_times[st.session_state.current_step]["end_time"] = end_time
+                                        st.session_state.steps_times[st.session_state.current_step]["time_spent"] = (
+                                            end_time - st.session_state.steps_times[st.session_state.current_step]["start_time"]
+                                        ).total_seconds()
+
+                                        # speichere die Montage-Schritte der aktuellen Aufgabe
+                                        save_task_steps(task.id, st.session_state.steps_times)
+
+                                        # Einfügen der aktuellen Aufgabe zu den in der Session erledigten Aufgaben
+                                        st.session_state.completed_tasks.append({
+                                            "version_name": task.version.name,
+                                            "time": task.time,
+                                            "start_timestamp": task.start_timestamp,
+                                            "end_timestamp": task.end_timestamp
+                                        })
+
+                                        # Aktualisieren der remaining_tasks
+                                        task_profile_name = list(st.session_state.remaining_tasks.keys())[0]
+                                        if st.session_state.remaining_tasks[task_profile_name][st.session_state.selected_version] > 0:
+                                            st.session_state.remaining_tasks[task_profile_name][st.session_state.selected_version] -= 1
+
+                                        # Ausgabe der Zeit für jeden Schritt
+                                        for idx, step in enumerate(st.session_state.steps_times):
+                                            print(f"Schritt {idx + 1}: {step['time_spent']:.2f} Sekunden")
+
+                                        with col2_2_2:
+                                            st.success("Aufgabe abgeschlossen, Gut gemacht!")
+
+                                        stop_stack_cam()
+
+                                        st.session_state.task_just_ended = True
+                                        st.rerun()
+                               
+                                if st.session_state.force_advance:
+                                    st.session_state.force_advance = False
+                                    advance_step_or_finish()
                                 # Nutzer drückt Beenden Knopf
                                 if st.button(label="Beende Schritt" if st.session_state.current_step < len(st.session_state.image_paths)-1 else "Beende Aufgabe", disabled=False if st.session_state.current_task else True):
+                                    erkannt = st.session_state.get("arbeitsplatz_stack_step_ready", False)
+
 
                                     # Wenn aktuell eine Aufgabe läuft
                                     if st.session_state.current_task:
-
-                                        # Wenn es sich nicht um den letzten Montage-Schritt handelt
-                                        if st.session_state.current_step < len(st.session_state.image_paths)-1:
-
-                                            with col2_2_2:
-                                                st.success(f"Montageschritt abgeschlossen. Bitte beginn unverzüglich mit dem nächsten Schritt. Der timer läuft weiter")
-
-                                            # Erfasse Endzeit für den aktuellen Schritt
-                                            end_time = datetime.now()
-                                            if st.session_state.current_step >= 0:
-                                                previous_step = st.session_state.steps_times[len(st.session_state.steps_times) - 1]
-                                                previous_step['end_time'] = end_time
-                                                previous_step['time_spent'] = (end_time - previous_step['start_time']).total_seconds()
-
-                                            # Starte den nächsten Schritt
-                                            st.session_state.steps_times.append({'start_time': end_time})
-                                            st.session_state.current_step += 1
-                                            time.sleep(time_between_tasks)
-                                            st.rerun()
-
-                                        # Wenn es sich um den letzten Montageschritt handelt
+                                        
+                                        
+                                        if erkannt:
+                                            advance_step_or_finish()
+                                            
                                         else:
-
-                                            if st.session_state.game_mode == 'timer':
-                                                st.session_state.timer_running.clear()  # Timer stoppen
-
-                                            if st.session_state.game_mode == 'countdown':
-                                                st.session_state.countdown_running.clear()  # Countdown stoppen
-
-                                            # Ende Zeit der gesamten Aufgabe bestimmen + benötigte Zeit
-                                            end_time = datetime.now()
-                                            elapsed_time = (end_time - st.session_state.start_time).total_seconds()
-                                            task = st.session_state.current_task
-                                            task.end_timestamp = end_time
-                                            task.time = elapsed_time
-                                            session.commit()
-
-                                            # Letzter Eintrag wird gefüllt
-                                            st.session_state.steps_times[st.session_state.current_step]['end_time'] = end_time
-                                            st.session_state.steps_times[st.session_state.current_step]['time_spent'] = (end_time - st.session_state.steps_times[st.session_state.current_step]['start_time']).total_seconds()
-
-
-                                            # speichere die Montage-Schritte der aktuellen Aufgabe -> Wenn Montage-Schritte in Datenbank geschrieben, dann Task tatsächlich beendet
-                                            save_task_steps(task.id, st.session_state.steps_times)
-
-                                            # Einfügen der aktuellen Aufgabe zu den in der Session erledigten Aufgaben
-                                            st.session_state.completed_tasks.append({
-                                                'version_name': task.version.name,
-                                                'time': task.time,
-                                                'start_timestamp': task.start_timestamp,
-                                                'end_timestamp': task.end_timestamp
-                                            })
-
-                                            # Aktualisieren der remaining_tasks
-                                            task_profile_name = list(st.session_state.remaining_tasks.keys())[0]
-                                            if st.session_state.remaining_tasks[task_profile_name][st.session_state.selected_version] > 0:
-                                                st.session_state.remaining_tasks[task_profile_name][st.session_state.selected_version] -= 1
-
-                                            # Ausgabe der Zeit für jeden Schritt
-                                            for idx, step in enumerate(st.session_state.steps_times):
-                                                print(f"Schritt {idx + 1}: {step['time_spent']:.2f} Sekunden")
-
-                                            with col2_2_2:
-                                                st.success('Aufgabe abgeschlossen, Gut gemacht!')
-
-                                            #time.sleep(2)
-                                            st.session_state.task_just_ended = True
-                                            st.rerun()
-
+                                            # Dialog öffnen
+                                            confirm_missing_module_dialog()
                                     # Ausgabe, dass keine laufende Task gefunden wurde -> Keine Aufgabe wurde bisher gestartet
                                     else:
                                         st.error("Keine laufende Task gefunden.")
+
+                                # if st.session_state.confirm_missing_module:
+                                #     confirm_missing_module_dialog() 
                     # Ausgabe, dass keine weiteren Aufgaben zu erledigen sind
                     else:
                         st.success("Keine Aufgabe mehr zu erledigen für das aktuelle Aufgabenprofil! Gut Gemacht!")
 
             # Fortschrittsanzeige
             with (col3):
+                # livecam
+                    # --- Livecam / Stack-Erkennung ---
                 with st.container(border=True):
-
-                    # Erledigte Aufgaben anzeigen
-                    st.subheader("Erledigte Aufgaben (aktuelle Sitzung)")
-                    if 'completed_tasks' in st.session_state and st.session_state.completed_tasks != []:
-                        for task in st.session_state.completed_tasks:
-                            st.write(f"{task['version_name']}: {task['time']:.2f} Sekunden")
+                    st.subheader("Livecam")
+                    cam_ph = st.empty()
+                    cam_status = st.empty()
+                    if st.session_state.current_task is  None or st.session_state.task_just_ended:
+                        cam_ph.info("Cam startet automatisch, sobald eine Aufgabe gestartet wird.")
+                        cam_status.empty()
+                        st.session_state.arbeitsplatz_stack_step_ready = False
                     else:
-                        st.write("Keine erledigten Aufgaben gefunden")
-                
+                        @st.fragment(run_every=0.5)
+                        def render_stack_cam():
+                            chk = st.session_state.stack_checker
+                            if chk is None:
+                                cam_ph.warning("StackChecker nicht initialisiert.")
+                                return
+
+                            frame, ready = chk.check()
+                            st.session_state.arbeitsplatz_stack_step_ready = bool(ready)
+
+                            if frame is None:
+                                cam_ph.warning("Kein Kamerabild.")
+                                return
+
+                            # OpenCV BGR -> RGB für Streamlit
+                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                            cam_ph.image(frame_rgb, use_container_width=True)
+
+                            if ready:
+                                cam_status.success("READY: Bauteil erkannt – nächster Schritt kann bestätigt werden.")
+                            else:
+                                cam_status.info("Suche… (noch nicht READY)")
+
+                        render_stack_cam()
+
                 if st.session_state.game_mode != 'classic':
 
                     with st.container(border=True):
-    
-                        st.session_state.timer_placeholder = st.empty()
+                        timer_ph = st.empty()
 
-                        # Anzeige des Timers
-                        if st.session_state.game_mode == 'timer':
+                        @st.fragment(run_every=0.2)
+                        def render_timer():
+                            if st.session_state.game_mode == "timer":
+                                if st.session_state.timer_running.is_set() and st.session_state.timer_start_ts is not None:
+                                    st.session_state.time_elapsed = time.time() - st.session_state.timer_start_ts
 
-                            time_class = "time_in"
-    
-                            # Update die Anzeige regelmäßig
-                            while st.session_state.get('timer_running', None) and st.session_state.timer_running.is_set():
+                                timer_ph.markdown(
+                                    f"""
+                                    <p class="time_in">
+                                        Vergangene Zeit:<br />{st.session_state.time_elapsed:.1f} Sekunden
+                                    </p>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
 
-                                st.session_state.timer_placeholder.markdown(
+                            elif st.session_state.game_mode == "countdown":
+                                if st.session_state.countdown_running.is_set() and st.session_state.countdown_end_ts is not None:
+                                    st.session_state.time_left = st.session_state.countdown_end_ts - time.time()
+
+                                time_left = float(st.session_state.time_left)
+                                time_class = "time_in" if time_left >= 0 else "time_out"
+
+                                timer_ph.markdown(
                                     f"""
                                     <p class="{time_class}">
-                                        {f"Vergangene Zeit:  <br />{st.session_state.time_elapsed:.1f} Sekunden"}
+                                        Verbleibende Zeit für Fertigung:<br />{time_left:.1f} Sekunden
                                     </p>
-                                    """, unsafe_allow_html=True)
-                                time.sleep(0.1)  # Display alle 0.1 Sekunden aktualisieren
-    
-                            # Abschlussanzeige
-                            if not st.session_state.timer_running.is_set():
-
-                                time_class = "time_in"
-
-                                st.session_state.timer_placeholder.markdown(
-                                    f"""
-                                    <p class="{time_class}">
-                                        {f"Vergangene Zeit: <br />{st.session_state.time_elapsed:.1f} Sekunden"}
-                                    </p>
-                                    """, unsafe_allow_html=True)
-
-                        # Anzeige des Countdowns
-                        if st.session_state.game_mode == 'countdown':
-
-                            # Update die Anzeige regelmäßig
-                            while st.session_state.get('countdown_running', None) and st.session_state.countdown_running.is_set():
-
-                                time_class = "time_in" if st.session_state.time_left >= 0 else "time_out"
-
-                                st.session_state.timer_placeholder.markdown(
-                                    f"""
-                                    <p class="{time_class}">
-                                        {f"Verbleibende Zeit für Fertigung: \n {st.session_state.time_left:.1f} Sekunden"}
-                                    </p>
-                                    """, unsafe_allow_html=True)
-                                time.sleep(0.1)  # Display alle 0.1 Sekunden aktualisieren
-    
-                            # Abschlussanzeige
-                            if not st.session_state.countdown_running.is_set():
-                                time_class = "time_in" if st.session_state.time_left >= 0 else "time_out"
-
-                                st.session_state.timer_placeholder.markdown(
-                                    f"""
-                                    <p class="{time_class}">
-                                        {f"Verbleibende Zeit für Fertigung: \n {st.session_state.time_left:.1f} Sekunden"}
-                                    </p>
-                                    """, unsafe_allow_html=True)
-
+                                    """,
+                                    unsafe_allow_html=True
+                                )
+                        render_timer()
 
                 if st.session_state.current_task is None:
 
@@ -648,12 +807,11 @@ def arbeitsplatz_page():
                                 st.write("Keine zugewiesene Bauteilliste für diese Version gefunden.")
                         else:
                             st.write("Probleme mit auslesen der Version ")
-
-
+                    
                     if st.button("Reset"):
                         reset()
 
-                if st.session_state.current_task is not None:
+                if st.session_state.current_task is not None and not st.session_state.task_just_ended:
 
                     with st.container(border=True):
                         
@@ -671,18 +829,47 @@ def arbeitsplatz_page():
                                 # Ziehe benötigte Anzahl der Bauteile für diesen Schritt
                                 required_counts = session.query(TaskComponentRequirement).filter_by(image_id=current_image.id).all()
 
-                                # Erstelle eine Liste der Bauteile und ihrer Anzahl
-                                component_data = [(rc.component.name, rc.count) for rc in required_counts]
+                                rows = []
+                                for rc in required_counts:
+                                    rows.append({
+                                        "Bauteil": rc.component.name,
+                                        "Anzahl": rc.count,
+                                        "_img": getattr(rc.component, "component_image_path", None)  # <-- ggf. Feldnamen anpassen
+                                    })
 
-                                # Konvertiere zu DataFrame
-                                if component_data:
-                                    df = pd.DataFrame(component_data, columns=["Bauteil", "Anzahl"])
+                                df = pd.DataFrame(rows)
 
-                                    # Zeige die Tabelle ohne Index an
-                                    st.dataframe(df, use_container_width=True, hide_index=True)
-
-                                else:
+                                if df.empty:
                                     st.warning("Keine Bauteile für diesen Schritt angegeben.")
+                                else:
+                                    event = st.dataframe(
+                                        df[["Bauteil", "Anzahl"]],
+                                        use_container_width=True,   # statt width="stretch"
+                                        hide_index=True,
+                                        key=f"components_step_{st.session_state.current_step}_{st.session_state.components_table_nonce}",
+                                        selection_mode="single-cell",
+                                        on_select="rerun",
+                                    )
+
+                                    row_idx = None
+                                    if hasattr(event, "selection") and getattr(event.selection, "cells", None):
+                                        row_idx = event.selection.cells[0][0]
+
+                                    if row_idx is not None:
+                                        name = df.loc[row_idx, "Bauteil"]
+                                        st.session_state.last_selected_component = name
+                                        st.session_state.selected_component = {
+                                            "name": name,
+                                            "count": int(df.loc[row_idx, "Anzahl"]),
+                                            "image_path": df.loc[row_idx, "_img"],
+                                        }
+                                        st.session_state.show_component_dialog = True
+
+                                    if st.session_state.show_component_dialog:
+                                        component_dialog()
+
+                            else:
+                                st.warning("Keine Bauteile für diesen Schritt angegeben.")
 
 
         # Ausgabe, wenn kein Aufgabenprofil in der Datenbank hinterlegt ist
