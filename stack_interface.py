@@ -9,7 +9,7 @@ class StackChecker:
     Lock passiert erst beim next_step() aus Step 0 heraus.
     """
 
-    def __init__(self, model_path, camera_index=0, imgsz=640, conf_thres=0.5):
+    def __init__(self, model_path, camera_index=0, imgsz=640, conf_thres=0.1):
         self.model = YOLO(model_path)
         self.cap = cv2.VideoCapture(camera_index)
 
@@ -128,11 +128,11 @@ class StackChecker:
                      "band": 0.16, "y_offset_norm": 0.03, "y_offset_px": 0}
                 ]},
                 {"id": 14, "min_overlap": 0.90, "items": [
-                    {"label": "blue module cable", "x": (0.36, 0.4),
+                    {"label": "cable input", "x": (0.36, 0.4),
                      "band": 0.04, "y_offset_norm": -0.22, "y_offset_px": 0}
                 ]},
                 {"id": 15, "min_overlap": 0.90, "items": [
-                    {"label": "blue module cable", "x": (0.43, 0.48),
+                    {"label": "cable input", "x": (0.43, 0.48),
                      "band": 0.04, "y_offset_norm": -0.22, "y_offset_px": 0}
                 ]},
                 {"id": 16, "min_overlap": 0.90, "items": [
@@ -437,7 +437,7 @@ class StackChecker:
 
 
 if __name__ == "__main__":
-    checker = StackChecker("newbestbestbest.pt")
+    checker = StackChecker("newbestbestbestbest.pt")
     checker.set_variant("v2")
 
     try:
