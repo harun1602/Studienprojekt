@@ -1,6 +1,19 @@
 import cv2
 from ultralytics import YOLO
 
+def save_step_to_database(step_data: dict):
+    """
+    Diese Funktion ist bewusst simpel gehalten.
+    Hier kannst du später z.B.:
+    - eine DB ansprechen
+    - JSON speichern
+    - API call machen
+    """
+    print("\n=== STEP DATA (TO SAVE) ===")
+    for k, v in step_data.items():
+        print(f"{k}: {v}")
+    print("==========================\n")
+
 
 class StackChecker:
     """
@@ -26,31 +39,31 @@ class StackChecker:
         self.module_layouts = {
             "v1": [
                 {"id": 0, "min_overlap": 0.95, "items": [
-                    {"label": "cable ending", "x": (0.62, 0.71),
+                    {"label": "cable ending", "x": (0.605, 0.72),
                      "band": 0.11, "y_offset_norm": 0.5, "y_offset_px": 0},
                 ]},
                 {"id": 1, "min_overlap": 0.90, "items": [
-                    {"label": "groin", "x": (0.07, 0.93),
-                     "band": 0.08, "y_offset_norm": 0.03, "y_offset_px": 0},
-                    {"label": "screw", "x": (0.145, 0.185),
-                     "band": 0.03, "y_offset_norm": 0.038, "y_offset_px": 0},
-                    {"label": "screw", "x": (0.814, 0.854),
-                     "band": 0.03, "y_offset_norm": 0.038, "y_offset_px": 0}
+                    {"label": "groin", "x": (0.03, 0.97),
+                     "band": 0.1, "y_offset_norm": 0.03, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.13, 0.185),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.8, 0.86),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0}
                 ]},
                 {"id": 2, "min_overlap": 0.90, "items": [
-                    {"label": "small gray module", "x": (0.382, 0.414),
-                     "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
+                    {"label": "small gray module", "x": (0.378, 0.419),
+                     "band": 0.18, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 3, "min_overlap": 0.90, "items": [
-                    {"label": "yellow module", "x": (0.4, 0.452),
-                     "band": 0.18, "y_offset_norm": 0.01, "y_offset_px": 0}
+                    {"label": "yellow module", "x": (0.398, 0.466),
+                     "band": 0.2, "y_offset_norm": 0.01, "y_offset_px": 0}
                 ]},
                 {"id": 4, "min_overlap": 0.90, "items": [
-                    {"label": "Blue Module", "x": (0.448, 0.485),
-                     "band": 0.22, "y_offset_norm": -0.02, "y_offset_px": 0}
+                    {"label": "Blue Module", "x": (0.446, 0.493),
+                     "band": 0.24, "y_offset_norm": -0.04, "y_offset_px": 0}
                 ]},
                 {"id": 5, "min_overlap": 0.90, "items": [
-                    {"label": "big gray module", "x": (0.48, 0.524),
+                    {"label": "big gray module", "x": (0.478, 0.526),
                      "band": 0.16, "y_offset_norm": 0.03, "y_offset_px": 0}
                 ]},
                 {"id": 6, "min_overlap": 0.90, "items": [
@@ -68,31 +81,31 @@ class StackChecker:
                      "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
                     {"label": "cable ending", "x": (0.19, 0.29),
                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
-                    {"label": "cable ending", "x": (0.61, 0.71),
+                    {"label": "cable ending", "x": (0.60, 0.70),
                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
                 ]},
                 {"id": 1, "min_overlap": 0.90, "items": [
-                    {"label": "groin", "x": (0.07, 0.93),
-                     "band": 0.08, "y_offset_norm": 0.03, "y_offset_px": 0},
-                    {"label": "screw", "x": (0.145, 0.185),
-                     "band": 0.03, "y_offset_norm": 0.038, "y_offset_px": 0},
-                    {"label": "screw", "x": (0.814, 0.854),
-                     "band": 0.03, "y_offset_norm": 0.038, "y_offset_px": 0}
+                    {"label": "groin", "x": (0.03, 0.97),
+                     "band": 0.1, "y_offset_norm": 0.03, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.13, 0.185),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.8, 0.86),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0}
                 ]},
                 {"id": 2, "min_overlap": 0.90, "items": [
-                    {"label": "35mm", "x": (0.82, 0.96),
+                    {"label": "35mm", "x": (0.82, 0.97),
                      "band": 0.22, "y_offset_norm": 0., "y_offset_px": 0}
                 ]},
                 {"id": 3, "min_overlap": 0.90, "items": [
-                    {"label": "small gray module", "x": (0.80, 0.84),
+                    {"label": "small gray module", "x": (0.78, 0.84),
                      "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 4, "min_overlap": 0.90, "items": [
-                    {"label": "yellow module", "x": (0.76, 0.82),
+                    {"label": "yellow module", "x": (0.73, 0.83),
                      "band": 0.2, "y_offset_norm": 0, "y_offset_px": 0}
                 ]},
                 {"id": 5, "min_overlap": 0.90, "items": [
-                    {"label": "yellow module", "x": (0.7, 0.77),
+                    {"label": "yellow module", "x": (0.68, 0.775),
                      "band": 0.2, "y_offset_norm": 0, "y_offset_px": 0}
                 ]},
                 {"id": 6, "min_overlap": 0.90, "items": [
@@ -100,7 +113,7 @@ class StackChecker:
                      "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 7, "min_overlap": 0.90, "items": [
-                    {"label": "big gray module", "x": (0.63, 0.68),
+                    {"label": "big gray module", "x": (0.625, 0.685),
                      "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
                 ]},
                 {"id": 8, "min_overlap": 0.90, "items": [
@@ -158,6 +171,130 @@ class StackChecker:
                 {"id": 21, "min_overlap": 0.90, "items": [
                     {"label": "grey module cable", "x": (0.76, 0.82),
                      "band": 0.05, "y_offset_norm": 0.03, "y_offset_px": 0}
+                ]}
+            ],
+            "v3": [
+                {"id": 0, "min_overlap": 0.95, "items": [
+                    {"label": "big cable ending", "x": (0.07, 0.2),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
+                    {"label": "cable ending", "x": (0.3, 0.4),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
+                    {"label": "cable ending", "x": (0.62, 0.71),
+                     "band": 0.12, "y_offset_norm": 0.47, "y_offset_px": 0},
+                    {"label": "cable ending", "x": (0.82, 0.92),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
+                    {"label": "round gray thing", "x": (0.44, 0.56),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0}
+                ]},
+                {"id": 1, "min_overlap": 0.90, "items": [
+                    {"label": "groin", "x": (0.03, 0.97),
+                     "band": 0.1, "y_offset_norm": 0.03, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.13, 0.185),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.8, 0.86),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0}
+                ]},
+                {"id": 2, "min_overlap": 0.90, "items": [
+                    {"label": "35mm", "x": (0.01, 0.19),
+                     "band": 0.21, "y_offset_norm": 0., "y_offset_px": 0}
+                ]},
+                {"id": 3, "min_overlap": 0.90, "items": [
+                    {"label": "small gray module", "x": (0.15, 0.20),
+                     "band": 0.16, "y_offset_norm": 0.02, "y_offset_px": 0}
+                ]},
+                {"id": 4, "min_overlap": 0.90, "items": [
+                    {"label": "Blue Module", "x": (0.17, 0.24),
+                     "band": 0.24, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 5, "min_overlap": 0.90, "items": [
+                    {"label": "big gray module", "x": (0.21, 0.28),
+                     "band": 0.16, "y_offset_norm": 0.03, "y_offset_px": 0}
+                ]},
+                {"id": 6, "min_overlap": 0.90, "items": [
+                    {"label": "yellow module", "x": (0.248, 0.318),
+                     "band": 0.19, "y_offset_norm": 0.01, "y_offset_px": 0}
+                ]},
+                {"id": 7, "min_overlap": 0.90, "items": [
+                    {"label": "black module", "x": (0.29, 0.52),
+                     "band": 0.26, "y_offset_norm": 0, "y_offset_px": 0}
+                ]},
+                {"id": 8, "min_overlap": 0.90, "items": [
+                    {"label": "Blue Module", "x": (0.5, 0.555),
+                     "band": 0.24, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 9, "min_overlap": 0.90, "items": [
+                    {"label": "yellow module", "x": (0.53, 0.61),
+                     "band": 0.19, "y_offset_norm": 0.01, "y_offset_px": 0}
+                ]},
+                {"id": 10, "min_overlap": 0.90, "items": [
+                    {"label": "Blue Module", "x": (0.58, 0.645),
+                     "band": 0.24, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 11, "min_overlap": 0.90, "items": [
+                    {"label": "yellow module", "x": (0.612, 0.692),
+                     "band": 0.19, "y_offset_norm": 0.01, "y_offset_px": 0}
+                ]},
+                {"id": 12, "min_overlap": 0.90, "items": [
+                    {"label": "gray orange module", "x": (0.665, 0.735),
+                     "band": 0.24, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 13, "min_overlap": 0.90, "items": [
+                    {"label": "gray orange module", "x": (0.70, 0.77),
+                     "band": 0.24, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 14, "min_overlap": 0.90, "items": [
+                    {"label": "gray orange module", "x": (0.735, 0.805),
+                     "band": 0.24, "y_offset_norm": -0.03, "y_offset_px": 0}
+                ]},
+                {"id": 15, "min_overlap": 0.90, "items": [
+                    {"label": "cable input", "x": (0.17, 0.24),
+                     "band": 0.05, "y_offset_norm": -0.14, "y_offset_px": 0}
+                ]},
+                {"id": 16, "min_overlap": 0.90, "items": [
+                    {"label": "cable input", "x": (0.248, 0.318),
+                     "band": 0.05, "y_offset_norm": 0.13, "y_offset_px": 0}
+                ]},
+                {"id": 17, "min_overlap": 0.90, "items": [
+                    {"label": "cable input", "x": (0.58, 0.645),
+                     "band": 0.05, "y_offset_norm": -0.14, "y_offset_px": 0}
+                ]},
+                {"id": 18, "min_overlap": 0.90, "items": [
+                    {"label": "cable input", "x": (0.74, 0.805),
+                     "band": 0.05, "y_offset_norm": -0.14, "y_offset_px": 0}
+                ]},
+                {"id": 19, "min_overlap": 0.90, "items": [
+                    {"label": "cable input", "x": (0.67, 0.735),
+                     "band": 0.05, "y_offset_norm": 0.08, "y_offset_px": 0}
+                ]},
+                {"id": 20, "min_overlap": 0.90, "items": [
+                    {"label": "cable input", "x": (0.49, 0.555),
+                     "band": 0.05, "y_offset_norm": -0.21, "y_offset_px": 0}
+                ]},
+            ],
+            "v4": [
+                {"id": 0, "min_overlap": 0.95, "items": [
+                    {"label": "big cable ending", "x": (0.07, 0.2),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
+                    {"label": "cable ending", "x": (0.3, 0.4),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
+                    {"label": "cable ending", "x": (0.62, 0.71),
+                     "band": 0.12, "y_offset_norm": 0.47, "y_offset_px": 0},
+                    {"label": "cable ending", "x": (0.82, 0.92),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0},
+                    {"label": "round gray thing", "x": (0.44, 0.56),
+                     "band": 0.12, "y_offset_norm": 0.5, "y_offset_px": 0}
+                ]},
+                {"id": 1, "min_overlap": 0.90, "items": [
+                    {"label": "groin", "x": (0.03, 0.97),
+                     "band": 0.1, "y_offset_norm": 0.03, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.13, 0.185),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0},
+                    {"label": "screw", "x": (0.8, 0.86),
+                     "band": 0.05, "y_offset_norm": 0.038, "y_offset_px": 0}
+                ]},
+                {"id": 2, "min_overlap": 0.90, "items": [
+                    {"label": "35mm", "x": (0.01, 0.19),
+                     "band": 0.21, "y_offset_norm": 0., "y_offset_px": 0}
                 ]},
             ]
         }
@@ -170,10 +307,10 @@ class StackChecker:
             "gray orange module": (128, 128, 128),
             "35mm": (0, 128, 128),
             "12.5mm": (0, 128, 128),
-            "black module": (0, 0, 0),
+            "black module": (0, 255, 255),
         }
 
-        self.active_variant = "v2"
+        self.active_variant = "v3"
         self.current_step = 0  # 0 = Box-Step
         self.ok_counter = 0
 
@@ -183,6 +320,23 @@ class StackChecker:
 
         self.used_ids_by_label = {}
         self._last_step_matches = []
+        self._last_step_items = []
+
+        #  -------------------- DATENSAMMLER-FUNKTION (WICHTIG) --------------------
+
+    def collect_step_data(self):
+        """
+        Gibt ALLE relevanten Infos des aktuellen Schritts zurück
+        Perfekt für DB / Logging / API
+        """
+        return {
+            "variant": self.active_variant,
+            "step": self.current_step,
+            "box_live": self.box_live,
+            "box_locked": self.box_locked,
+            "box_is_locked": self.box_is_locked,
+            "items": self._last_step_items.copy()
+        }
 
     # -------------------- Drawing helpers --------------------
 
@@ -361,7 +515,6 @@ class StackChecker:
             step = self.module_layouts[self.active_variant][step_index]
 
             box = self.box_locked if self.box_is_locked else self.box_live
-            ok = False
 
             if box is None:
                 cv2.putText(out, "NO BOX (lock first)", (15, 55),
@@ -374,10 +527,22 @@ class StackChecker:
 
                 ok = True
                 self._last_step_matches = []
+                self._last_step_items = []
 
                 for item in step.get("items", []):
                     label = item["label"]
                     zone = self._zone_for_item(item, box)
+                    item_log = {
+                        "label": label,
+                        "zone": zone,
+                        "detected": False,
+                        "det_xyxy": None,
+                        "confidence": None,
+                        "overlap": 0.0,
+                        "min_overlap": None,
+                        "ok": False,
+                        "tracking_id": None
+                    }
                     if zone is None:
                         ok = False
                         continue
@@ -395,6 +560,8 @@ class StackChecker:
                         ok = False
                         cv2.putText(out, f"MISSING (min {step_min_overlap:.2f})", (zx1, zy2 + 20),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.70, (0, 0, 255), 2)
+                        item_log["min_overlap"] = step_min_overlap
+                        self._last_step_items.append(item_log)
                         continue
 
                     det_xyxy, det_conf, tid, ratio = det
@@ -402,14 +569,25 @@ class StackChecker:
                     # Item kann step-min überschreiben
                     min_ov = float(item.get("min_overlap", step_min_overlap))
                     is_ok = ratio >= min_ov
+                    item_log.update({
+                        "detected": True,
+                        "det_xyxy": det_xyxy,
+                        "confidence": det_conf,
+                        "overlap": ratio,
+                        "min_overlap": min_ov,
+                        "ok": is_ok,
+                        "tracking_id": tid
+                    })
+
+                    self._last_step_items.append(item_log)
                     ok = ok and is_ok
 
                     status_col = (0, 255, 0) if is_ok else (0, 0, 255)
 
-                    # ✅ erkanntes Modul: CONF anzeigen
+                    # erkanntes Modul: CONF anzeigen
                     self._draw_box(out, det_xyxy, text=f"confidence {det_conf:.2f}", color=status_col)
 
-                    # ✅ Zielzone: overlap + min overlap anzeigen
+                    # Zielzone: overlap + min overlap anzeigen
                     cv2.putText(out, f"{'OK' if is_ok else 'WRONG'} ov {ratio:.2f} (min {min_ov:.2f})",
                                 (zx1, zy2 + 25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.70, status_col, 2)
@@ -437,8 +615,8 @@ class StackChecker:
 
 
 if __name__ == "__main__":
-    checker = StackChecker("newbestbestbestbest.pt")
-    checker.set_variant("v2")
+    checker = StackChecker("newbestbestbestbestbest.pt")
+    checker.set_variant("v3")
 
     try:
         while not checker.is_done():
@@ -451,6 +629,10 @@ if __name__ == "__main__":
             if k == ord("q"):
                 break
             if k == ord("n"):
+                step_data = checker.collect_step_data()
+                save_step_to_database(step_data)
                 checker.next_step()
     finally:
         checker.release()
+
+
