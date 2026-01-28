@@ -9,7 +9,7 @@ from data.database_code import session
 from datetime import datetime
 import os
 import streamlit as st
-
+import json
 
 def add_user(session, firstname, lastname, nickname, age, skill, selected_task_profiles):
 
@@ -717,4 +717,57 @@ def check_component_discrepancies(version_id):
         st.dataframe(df_discrepancies, use_container_width=True)
     else:
         st.success("Die Zuweisungen sind konsistent mit der Bauliste der Version.")
+
+def get_step_status(self, r, frame):
+    """Berechnet für ALLE Module des aktuellen Schritts: confidence + recognized."""
+    if self.current_step == 0:
+        return [{"label": "box", "recognized": self.box_live is not None, "overlap": 1.0, "confidence": 1.0}]
+    
+    step_index = self.current_step - 1
+    step = self.module_layouts[self.active_variant][step_index]
+    box = self.box_locked if self.box_is_locked else self.box_live
+    
+    status = []
+    for item in step.get("items", []):
+        label = item["label"]
+        zone = self._zone_for_item(item, box)
+        
+        recognized = False
+        overlap = 0.0
+        confidence = 0.0
+        
+        if zone:
+            det = self._best_det_for_zone(r, label, zone)
+            if det:
+                det_xyxy, conf, tid, ratio = det
+                min_ov = float(item.get("min_overlap", step.get("min_overlap", self.DEFAULT_MIN_OVERLAP)))
+                recognized = ratio >= min_ov
+                overlap = round(ratio, 3)
+                confidence = round(conf, 3)
+        
+        status.append({
+            "label": label,
+            "recognized": recognized,
+            "overlap": overlap,
+            "confidence": confidence
+        })
+    
+    return status
+
+def save_recognized_modules_status(self, task_id, session): 
+    """Speichert den Status der Module."""
+    step_status = getattr(self, '_last_status', []) 
+    
+    step = session.query(TaskStep).filter(
+        TaskStep.task_id == task_id,
+        TaskStep.step_number == self.current_step
+    ).first()
+    
+    if step:
+        step.recognition_status = json.dumps(step_status)
+        step.recognized_modules = sum(1 for s in step_status if s["recognized"])
+        step.total_modules = len(step_status)
+        step.is_step_complete = all(s["recognized"] for s in step_status)
+        
+        session.commit()
 
