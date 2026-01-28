@@ -1,6 +1,7 @@
 import cv2
+import json
 from ultralytics import YOLO
-
+from DemonstratorProzesszeitprognose.data.database_functions import save_recognized_modules_status, get_step_status
 
 class StackChecker:
     """
@@ -335,7 +336,7 @@ class StackChecker:
         self.ok_counter = 0
         self._last_step_matches = []
 
-    def check(self):
+    def check(self, task_id=None, session=None):
         ret, frame = self.cap.read()
         if not ret:
             return None, False
@@ -419,6 +420,16 @@ class StackChecker:
         # Hold counter -> step_ready
         self.ok_counter = self.ok_counter + 1 if ok else 0
         step_ready = self.ok_counter >= self.STEP_CONFIRM_FRAMES
+        
+        current_status = get_step_status(r, frame)
+        
+        if task_id and session:
+            save_recognized_modules_status(
+                session=session,
+                task_id=task_id,
+                current_step=self.current_step,
+                step_status=current_status
+            )
 
         total_steps = len(self.module_layouts[self.active_variant])
         cv2.putText(out,
@@ -429,7 +440,7 @@ class StackChecker:
             cv2.putText(out, "READY (verify + next in UI / press 'n')",
                         (15, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
 
-        return out, step_ready
+        return out, step_ready, current_status
 
     def release(self):
         self.cap.release()
