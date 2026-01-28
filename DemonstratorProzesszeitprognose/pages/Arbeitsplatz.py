@@ -15,8 +15,90 @@ from streamlit.runtime.scriptrunner import add_script_run_ctx
 import cv2
 from Recognition.stack_interface import StackChecker
 
-# Skript zur Logik und Darstellung des Arbeitslatzes
 
+import sys
+import subprocess
+from multiprocessing.managers import BaseManager
+
+PORT = 50055
+AUTH = b"stackkey"
+
+class ClientManager(BaseManager):
+    pass
+
+
+ClientManager.register("get_cmd_q")
+ClientManager.register("get_status")
+
+def connect_manager():
+    m = ClientManager(address=("127.0.0.1", PORT), authkey=AUTH)
+    m.connect()
+    return m
+
+def start_runner(variant="v1", camera="1"):
+    proc = st.session_state.get("proc")
+    if proc is not None and proc.poll() is None:
+        st.warning("Runner läuft schon – starte keinen zweiten.")
+    else:
+        # Projekt-Root sauber bestimmen (ggf. parents[] anpassen!)
+        ROOT = Path(__file__).resolve().parents[1]  
+        RUNNER = ROOT / "Recognition" / "stack_runner.py"
+        MODEL  = ROOT / "Recognition" / "best.pt"
+
+        log_path = ROOT / "stack_runner.log"
+        log_f = open(log_path, "a", encoding="utf-8")
+
+        creationflags = 0
+        if sys.platform.startswith("win"):
+            creationflags = subprocess.CREATE_NEW_CONSOLE
+
+        st.session_state.proc = subprocess.Popen(
+            [
+                sys.executable, "-u", str(RUNNER),
+                "--model", str(MODEL),
+                "--variant", variant,
+                "--camera", str(camera),
+                "--port", str(PORT),
+                "--auth", AUTH.decode("utf-8"),
+            ],
+            cwd=str(ROOT),                 # <<< wichtig
+            stdout=log_f, stderr=log_f,    # <<< wichtig: Fehler landen im Log
+            creationflags=creationflags,
+        )
+        time.sleep(0.6)
+def beende_runner():
+    try:
+        m = connect_manager()
+        m.get_cmd_q().put("stop")
+    except Exception:
+        pass
+
+    proc = st.session_state.get("proc")
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+    st.session_state.proc = None
+    st.session_state.arbeitsplatz_stack_step_ready = False
+
+def runner_nextStep():
+    try:
+        m = connect_manager()
+        m.get_cmd_q().put("next")
+    except Exception as e:
+        st.warning(f"Runner nicht erreichbar: {e}")
+
+def update_ready():
+    try:
+        m = connect_manager()
+        status = m.get_status()
+        # status ist ein Proxy-Dict, Werte direkt lesbar
+        return dict(status)
+    except Exception as e:
+        st.warning(f"Runner nicht erreichbar: {e}")
+        return {"ready": False, "running": False}
 
 def arbeitsplatz_page():
     # Setzen des Seitenlayouts
@@ -138,38 +220,6 @@ def arbeitsplatz_page():
                 st.session_state.components_table_nonce += 1  # <-- Tabelle neu “mounten”
                 st.rerun()
 
-    def start_stack_cam():
-        """Startet StackChecker + Kamera (wird bei Task-Start aufgerufen)."""
-        if st.session_state.stack_checker is None:
-            # Modellpfad ggf. aus Setting ziehen, sonst Default
-            model_path = get_setting("yolo_model_path", "best.pt")
-            
-            MODEL_PATH = Path(__file__).resolve().parents[1] / "Recognition" / "best.pt"
-            st.session_state.stack_checker = StackChecker( model_path=MODEL_PATH)
-
-        # Variante setzen (optional – Beispiel: Versionname enthält 'v2')
-        try:
-            vname = (st.session_state.selected_version or "").lower()
-            variant = "v2" if "v2" in vname else "v1"
-            st.session_state.stack_variant = variant
-            st.session_state.stack_checker.set_variant(variant)
-        except Exception:
-            pass
-
-        st.session_state.stack_cam_running = True
-    def stop_stack_cam():
-        """Stoppt Kamera/Checker sauber (wird bei Task-Ende aufgerufen)."""
-        chk = st.session_state.stack_checker
-        if chk is not None:
-            try:
-                chk.release()
-            except Exception:
-                pass
-
-        st.session_state.stack_checker = None
-        st.session_state.stack_cam_running = False
-        st.session_state.arbeitsplatz_stack_step_ready = False
-
 
     # ----- Nachfolgenden werden die session-states definiert, welche für das korrekte beibehalten von Informationen/Variablenzuständen über Seiten-Aktualisierungen (also alle Operationen die einen refresh triggern -> bspw Button-Drücken) hinweg benötigt werden
     # Session State für Timer
@@ -274,6 +324,11 @@ def arbeitsplatz_page():
     
     if "stack_variant" not in st.session_state:
         st.session_state.stack_variant = "v1"
+
+
+    if "proc" not in st.session_state:
+       st.session_state.proc = None    
+
 
 
     # Game_Modes
@@ -578,7 +633,20 @@ def arbeitsplatz_page():
 
                                             st.session_state.current_task = new_task
 
-                                            start_stack_cam()
+                                            # start_stack_cam()
+                                            # if st.session_state.proc is None or st.session_state.proc.poll() is not None:
+                                            #     # NEW_CONSOLE -> separates Konsolenfenster (optional, OpenCV Fenster kommt sowieso)
+                                            #     creationflags = 0
+                                            #     if sys.platform.startswith("win"):
+                                            #         creationflags = subprocess.CREATE_NEW_CONSOLE
+
+                                            #     st.session_state.proc = subprocess.Popen(
+                                            #         [sys.executable, "stack_runner.py", "--model", "best.pt", "--variant", "v1",
+                                            #         "--camera", "1", "--port", str(PORT), "--auth", AUTH.decode("utf-8")],
+                                            #         creationflags=creationflags
+                                            #     )
+                                            #     time.sleep(0.6)  # kurz warten, bis IPC-Server da ist
+                                            start_runner()
 
                                             with col2_2_1:
                                                 # Ausgabe, dass der Timer läuft
@@ -614,11 +682,7 @@ def arbeitsplatz_page():
                                         st.session_state.current_step += 1
 
                                         # >>> StackChecker Step mitziehen
-                                        if st.session_state.stack_checker is not None:
-                                            try:
-                                                st.session_state.stack_checker.next_step()
-                                            except Exception:
-                                                pass
+                                        runner_nextStep()
 
 
                                         time.sleep(time_between_tasks)
@@ -670,9 +734,9 @@ def arbeitsplatz_page():
 
                                         with col2_2_2:
                                             st.success("Aufgabe abgeschlossen, Gut gemacht!")
-
-                                        stop_stack_cam()
-
+                                        
+                                        #Aufgabe beenden
+                                        beende_runner()
                                         st.session_state.task_just_ended = True
                                         st.rerun()
                                
@@ -681,7 +745,9 @@ def arbeitsplatz_page():
                                     advance_step_or_finish()
                                 # Nutzer drückt Beenden Knopf
                                 if st.button(label="Beende Schritt" if st.session_state.current_step < len(st.session_state.image_paths)-1 else "Beende Aufgabe", disabled=False if st.session_state.current_task else True):
-                                    erkannt = st.session_state.get("arbeitsplatz_stack_step_ready", False)
+                                    
+                                    status = update_ready()
+                                    erkannt = bool(status.get("ready", False))
 
 
                                     # Wenn aktuell eine Aufgabe läuft
@@ -707,40 +773,16 @@ def arbeitsplatz_page():
             # Fortschrittsanzeige
             with (col3):
                 # livecam
-                    # --- Livecam / Stack-Erkennung ---
                 with st.container(border=True):
-                    st.subheader("Livecam")
-                    cam_ph = st.empty()
-                    cam_status = st.empty()
-                    if st.session_state.current_task is  None or st.session_state.task_just_ended:
-                        cam_ph.info("Cam startet automatisch, sobald eine Aufgabe gestartet wird.")
-                        cam_status.empty()
-                        st.session_state.arbeitsplatz_stack_step_ready = False
-                    else:
-                        @st.fragment(run_every=0.5)
-                        def render_stack_cam():
-                            chk = st.session_state.stack_checker
-                            if chk is None:
-                                cam_ph.warning("StackChecker nicht initialisiert.")
-                                return
+                    ROOT = Path(__file__).resolve().parents[1]
+                    log_path = ROOT / "stack_runner.log"
 
-                            frame, ready = chk.check()
-                            st.session_state.arbeitsplatz_stack_step_ready = bool(ready)
+                    if st.button("Runner-Log anzeigen"):
+                        if log_path.exists():
+                            st.code(log_path.read_text(encoding="utf-8", errors="ignore")[-8000:])
+                        else:
+                            st.info("Noch kein Log vorhanden.")
 
-                            if frame is None:
-                                cam_ph.warning("Kein Kamerabild.")
-                                return
-
-                            # OpenCV BGR -> RGB für Streamlit
-                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                            cam_ph.image(frame_rgb, use_container_width=True)
-
-                            if ready:
-                                cam_status.success("READY: Bauteil erkannt – nächster Schritt kann bestätigt werden.")
-                            else:
-                                cam_status.info("Suche… (noch nicht READY)")
-
-                        render_stack_cam()
 
                 if st.session_state.game_mode != 'classic':
 

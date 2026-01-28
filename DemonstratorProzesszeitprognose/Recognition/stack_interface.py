@@ -438,21 +438,21 @@ class StackChecker:
         cv2.destroyAllWindows()
 
 
-# if __name__ == "__main__":
-#     checker = StackChecker("best.pt")
-#     checker.set_variant("v2")
+if __name__ == "__main__":
+    checker = StackChecker("best.pt")
+    checker.set_variant("v2")
 
-#     try:
-#         while not checker.is_done():
-#             frame, ready = checker.check()
-#             if frame is None:
-#                 continue
+    try:
+        while not checker.is_done():
+            frame, ready = checker.check()
+            if frame is None:
+                continue
 
-#             cv2.imshow("STACK CHECK", frame)
-#             k = cv2.waitKey(1) & 0xFF
-#             if k == ord("q"):
-#                 break
-#             if k == ord("n"):
-#                 checker.next_step()
-#     finally:
-#         checker.release()
+            cv2.imshow("STACK CHECK", frame)
+            k = cv2.waitKey(1) & 0xFF
+            if k == ord("q"):
+                break
+            if k == ord("n"):
+                checker.next_step()
+    finally:
+        checker.release()
