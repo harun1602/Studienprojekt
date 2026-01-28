@@ -80,6 +80,9 @@ class TaskStep(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=True)
     time_spent = Column(Integer, nullable=True)
+    recognition_status = Column(Text)  
+    recognized_modules = Column(Integer, default=0)
+    total_modules = Column(Integer, default=0)
 
     task = relationship('Task', back_populates='task_steps')
 
