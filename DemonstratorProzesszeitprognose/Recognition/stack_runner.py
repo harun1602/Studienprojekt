@@ -14,12 +14,13 @@ CMD_Q = Queue()   # Commands: "next", "stop", "reset", "set_variant:v2", ...
 STATUS = {
     "running": False,
     "ready": False,
+    "cam_state": "starting",   # starting | ok | no_device | error
+    "cam_error": "",
     "step": 0,
     "total_steps": 0,
     "variant": "",
     "done": False,
     "last_update": 0.0,
-    "error": ""
 }
 
 
@@ -53,6 +54,17 @@ def main():
     try:
         checker = StackChecker(args.model, camera_index=args.camera)
         checker.set_variant(args.variant)
+        try:
+            if not checker.cap.isOpened():
+                STATUS["cam_state"] = "no_device"
+                STATUS["cam_error"] = f"Kamera Index {args.camera} konnte nicht geöffnet werden."
+            else:
+                STATUS["cam_state"] = "starting"
+                STATUS["cam_error"] = ""
+        except Exception as e:
+            STATUS["cam_state"] = "error"
+            STATUS["cam_error"] = str(e)
+        
 
         STATUS["running"] = True
         STATUS["variant"] = args.variant
@@ -81,7 +93,20 @@ def main():
             # --- Frame Check ---
             frame, ready = checker.check()
             if frame is None:
+                # nach z.B. 3 Sekunden ohne Frame => error
+                if "no_frame_since" not in STATUS:
+                    STATUS["no_frame_since"] = time.time()
+                if time.time() - STATUS["no_frame_since"] > 3.0:
+                    STATUS["cam_state"] = "error"
+                    STATUS["cam_error"] = f"Keine Frames von Kamera Index {args.camera} (Backend/Blockiert?)."
+                else:
+                    STATUS["cam_state"] = "starting"
+                time.sleep(0.05)
                 continue
+            else:
+                STATUS.pop("no_frame_since", None)
+                STATUS["cam_state"] = "ok"
+                STATUS["cam_error"] = ""
 
             STATUS["ready"] = bool(ready)
             STATUS["step"] = int(checker.current_step)
@@ -92,10 +117,10 @@ def main():
             k = cv2.waitKey(1) & 0xFF
 
             # Optional: Tastatur bleibt zusätzlich möglich
-            if k == ord("q"):
-                break
-            if k == ord("n"):
-                checker.next_step()
+            # if k == ord("q"):
+            #     break
+            # if k == ord("n"):
+            #     checker.next_step()
 
             if STATUS["done"]:
                 break

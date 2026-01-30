@@ -11,7 +11,7 @@ from navigation import make_sidebar
 from data.database_code import session
 
 from streamlit.runtime.scriptrunner import add_script_run_ctx
-
+from datetime import datetime
 import cv2
 from Recognition.stack_interface import StackChecker
 
@@ -35,22 +35,22 @@ def connect_manager():
     m.connect()
     return m
 
-def start_runner(variant="v1", camera="1"):
+def start_runner(variant="v1", camera="0"):
     proc = st.session_state.get("proc")
     if proc is not None and proc.poll() is None:
-        st.warning("Runner läuft schon – starte keinen zweiten.")
+        print("Runner läuft schon – starte keinen zweiten.")
     else:
         # Projekt-Root sauber bestimmen (ggf. parents[] anpassen!)
         ROOT = Path(__file__).resolve().parents[1]  
         RUNNER = ROOT / "Recognition" / "stack_runner.py"
         MODEL  = ROOT / "Recognition" / "best.pt"
 
-        log_path = ROOT / "stack_runner.log"
-        log_f = open(log_path, "a", encoding="utf-8")
+        # log_path = ROOT / "stack_runner.log"
+        # log_f = open(log_path, "a", encoding="utf-8")
 
         creationflags = 0
-        if sys.platform.startswith("win"):
-            creationflags = subprocess.CREATE_NEW_CONSOLE
+        # if sys.platform.startswith("win"):
+        #     creationflags = subprocess.CREATE_NEW_CONSOLE
 
         st.session_state.proc = subprocess.Popen(
             [
@@ -62,7 +62,7 @@ def start_runner(variant="v1", camera="1"):
                 "--auth", AUTH.decode("utf-8"),
             ],
             cwd=str(ROOT),                 # <<< wichtig
-            stdout=log_f, stderr=log_f,    # <<< wichtig: Fehler landen im Log
+            # stdout=log_f, stderr=log_f,    # <<< wichtig: Fehler landen im Log
             creationflags=creationflags,
         )
         time.sleep(0.6)
@@ -329,6 +329,9 @@ def arbeitsplatz_page():
     if "proc" not in st.session_state:
        st.session_state.proc = None    
 
+    if "cam_ok" not in st.session_state:
+        st.session_state.cam_ok = False
+
 
 
     # Game_Modes
@@ -580,6 +583,19 @@ def arbeitsplatz_page():
                                 if 'current_task' in st.session_state and st.session_state.current_task is not None:
 
                                     # Ausgabe, dass der Timer läuft
+
+                                    
+                                    while not st.session_state.cam_ok:
+                                        try:
+                                            m = connect_manager()
+                                            status = m.get_status()  # Proxy
+                                            cam_state = str(status.get("cam_state", "starting"))
+                                            if cam_state == "ok":
+                                                st.session_state.cam_ok = True
+                                        except Exception as e:
+                                            st.session_state.cam_ok = False
+                                            # status_ph.warning(f"⏳ Verbinde zum Runner … ({e})")
+
                                     status_placeholder.success(f"Task '{version.name}' gestartet! Timer läuft...")
 
                                 # Wenn "Starte Aufgabe" - Button gedrückt wird
@@ -774,14 +790,35 @@ def arbeitsplatz_page():
             with (col3):
                 # livecam
                 with st.container(border=True):
-                    ROOT = Path(__file__).resolve().parents[1]
-                    log_path = ROOT / "stack_runner.log"
+                    st.subheader("Kamera Status")
+                    status_ph = st.empty()
 
-                    if st.button("Runner-Log anzeigen"):
-                        if log_path.exists():
-                            st.code(log_path.read_text(encoding="utf-8", errors="ignore")[-8000:])
-                        else:
-                            st.info("Noch kein Log vorhanden.")
+                    @st.fragment(run_every="1s")
+                    def poll_cam():
+                        try:
+                            m = connect_manager()
+                            status = m.get_status()  # Proxy
+                            cam_state = str(status.get("cam_state", "starting"))
+                            cam_error = str(status.get("cam_error", ""))
+
+                            if cam_state == "ok":
+                                st.session_state.cam_ok = True
+                                status_ph.success("✅ Kamera OK")
+                            elif cam_state == "no_device":
+                                st.session_state.cam_ok = False
+                                status_ph.error(f"❌ Keine Kamera: {cam_error}")
+                            elif cam_state == "error":
+                                st.session_state.cam_ok = False
+                                status_ph.error(f"❌ Kamera-Fehler: {cam_error}")
+                            else:
+                                st.session_state.cam_ok = False
+                                status_ph.info("⏳ Kamera startet …")
+
+                        except Exception as e:
+                            st.session_state.cam_ok = False
+                            status_ph.warning(f"⏳ Verbinde zum Runner … ({e})")
+
+                    poll_cam()
 
 
                 if st.session_state.game_mode != 'classic':
