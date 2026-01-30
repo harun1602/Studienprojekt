@@ -35,7 +35,7 @@ def connect_manager():
     m.connect()
     return m
 
-def start_runner(variant="v1", camera="1"):
+def start_runner(variant="v1", camera="0"):
     proc = st.session_state.get("proc")
     if proc is not None and proc.poll() is None:
         st.warning("Runner läuft schon – starte keinen zweiten.")
