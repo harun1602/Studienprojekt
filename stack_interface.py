@@ -615,7 +615,7 @@ class StackChecker:
 
 
 if __name__ == "__main__":
-    checker = StackChecker("newbestbestbestbestbest.pt")
+    checker = StackChecker("best-v0.pt")
     checker.set_variant("v3")
 
     try:
