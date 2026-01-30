@@ -19,7 +19,8 @@ STATUS = {
     "variant": "",
     "done": False,
     "last_update": 0.0,
-    "error": ""
+    "error": "",
+    "step_data": {}
 }
 
 
@@ -58,6 +59,7 @@ def main():
         STATUS["variant"] = args.variant
         STATUS["total_steps"] = len(checker.module_layouts[checker.active_variant])
         STATUS["error"] = ""
+        #STATUS["step_data"] = dict[str, str]
 
         while True:
             # --- Commands abarbeiten ---
@@ -65,7 +67,7 @@ def main():
                 while True:
                     cmd = CMD_Q.get_nowait()
                     if cmd == "next":
-                        checker.next_step()
+                        STATUS["step_data"]=checker.next_step()
                     elif cmd == "reset":
                         checker.reset()
                     elif cmd.startswith("set_variant:"):

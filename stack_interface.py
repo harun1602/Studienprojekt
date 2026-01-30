@@ -1,5 +1,6 @@
 import cv2
 from ultralytics import YOLO
+from DemonstratorProzesszeitprognose.data.database_functions import save_task_steps
 
 def save_step_to_database(step_data: dict):
     """
@@ -9,6 +10,7 @@ def save_step_to_database(step_data: dict):
     - JSON speichern
     - API call machen
     """
+    
     print("\n=== STEP DATA (TO SAVE) ===")
     for k, v in step_data.items():
         print(f"{k}: {v}")
@@ -330,6 +332,14 @@ class StackChecker:
         Perfekt für DB / Logging / API
         """
         return {
+            "variant": "st",
+            "step": "self.current_stepr vv ",
+            "box_live": "self.box_live fg ",
+            "box_locked": "self.box_locked rfsg ",
+            "box_is_locked": "self.box_is_locked drfs rg",
+            "items": "self._last_step_items.copy()  rgeswresw"
+        }
+        return {
             "variant": self.active_variant,
             "step": self.current_step,
             "box_live": self.box_live,
@@ -484,10 +494,15 @@ class StackChecker:
             if tid is None:
                 continue
             self.used_ids_by_label.setdefault(label, set()).add(tid)
-
+    
+        
+        step_data = self.collect_step_data()
+        #variant = step_data["variant"]
+        #save_task_steps(variant, )
         self.current_step += 1
         self.ok_counter = 0
         self._last_step_matches = []
+        return step_data
 
     def check(self):
         ret, frame = self.cap.read()
@@ -629,8 +644,8 @@ if __name__ == "__main__":
             if k == ord("q"):
                 break
             if k == ord("n"):
-                step_data = checker.collect_step_data()
-                save_step_to_database(step_data)
+                #step_data = checker.collect_step_data()
+                #save_step_to_database(step_data)
                 checker.next_step()
     finally:
         checker.release()

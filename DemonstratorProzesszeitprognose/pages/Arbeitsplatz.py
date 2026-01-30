@@ -83,10 +83,23 @@ def beende_runner():
     st.session_state.proc = None
     st.session_state.arbeitsplatz_stack_step_ready = False
 
+def save_info_to_db():
+    try:
+        print("try save data")
+        m = connect_manager()
+        status = m.get_status()
+        step_staus =  status.get("step_data","test")
+        print(step_staus)
+    except Exception as e:
+        print(f"Runner nicht erreichbar: {e}")
+
 def runner_nextStep():
+    
     try:
         m = connect_manager()
         m.get_cmd_q().put("next")
+        time.sleep(0.6)
+        save_info_to_db()
     except Exception as e:
         st.warning(f"Runner nicht erreichbar: {e}")
 

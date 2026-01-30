@@ -80,8 +80,58 @@ class TaskStep(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=True)
     time_spent = Column(Integer, nullable=True)
-
+    
     task = relationship('Task', back_populates='task_steps')
+    context = relationship('TaskStepContext', uselist=False, back_populates='task_step', cascade="all, delete-orphan")
+    items = relationship('TaskStepItem', back_populates='task_step', cascade="all, delete-orphan")
+
+class TaskStepContext(Base):
+    """
+    Tabelle für Kontext- und Zustandsinformationen eines TaskSteps.
+
+    Relationships:
+
+    task_step: Verweis auf den zugehörigen Aufgaben-Schritt
+    """
+    __tablename__ = 'task_step_contexts'
+
+    id = Column(Integer, primary_key=True)
+    task_step_id = Column(Integer, ForeignKey('task_steps.id'), unique=True)
+
+    variant = Column(String)
+    box_live = Column(String)      # "(x1,y1,x2,y2)" oder JSON
+    box_locked = Column(String)
+    box_is_locked = Column(Boolean)
+
+    task_step = relationship('TaskStep', back_populates='context')
+
+class TaskStepItem(Base):
+    """
+    Tabelle für erkannte Module/Objekte innerhalb eines TaskSteps.
+
+    Relationships:
+
+    task_step: Verweis auf den zugehörigen Aufgaben-Schritt
+    """
+    __tablename__ = 'task_step_items'
+
+    id = Column(Integer, primary_key=True)
+    task_step_id = Column(Integer, ForeignKey('task_steps.id'))
+
+    label = Column(String, nullable=False)
+
+    zone = Column(String, nullable=True)
+    detected = Column(Boolean, nullable=False)
+    det_xyxy = Column(String, nullable=True)
+
+    confidence = Column(Double, nullable=True)
+    overlap = Column(Double, nullable=True)
+    min_overlap = Column(Double, nullable=True)
+
+    ok = Column(Boolean, nullable=False)
+    tracking_id = Column(Integer, nullable=True)
+
+    task_step = relationship('TaskStep', back_populates='items')
 
 
 # Definition Tabelle Gesamtaufgabe
