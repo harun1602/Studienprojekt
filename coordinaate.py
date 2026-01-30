@@ -6,6 +6,13 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+# =========================
+# Model
+# =========================
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(PROJECT_DIR, "best.pt")
+model = YOLO(MODEL_PATH)
+cap = cv2.VideoCapture(0)
 
 # ============================================================
 # 1) CONFIG
