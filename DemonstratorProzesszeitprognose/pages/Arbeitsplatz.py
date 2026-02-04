@@ -61,6 +61,7 @@ def start_runner(variant="v1", camera="1"):
         time.sleep(0.6)
 
 def beende_runner():
+    save_step_data_from_runner()
     try:
         m = connect_manager()
         m.get_cmd_q().put("stop")
@@ -78,6 +79,7 @@ def beende_runner():
     st.session_state.cam_ok = False
 
 def runner_nextStep():
+    save_step_data_from_runner()
     try:
         m = connect_manager()
         m.get_cmd_q().put("next")
@@ -95,13 +97,6 @@ def update_ready():
 
 def save_step_data_from_runner():
     print("save_step_data_from_runner")
-    # try:
-    #     m = connect_manager()
-    #     m.get_cmd_q().put("snapshot")
-    # except Exception as e:
-    #     print(f"Snapshot nicht möglich: {e}")
-
-    time.sleep(1)
 
     status = update_ready()
     step_data = status.get("step_data")
@@ -657,10 +652,7 @@ def arbeitsplatz_page():
 
                                         # Stack_runner nextStep übergeben
                                         runner_nextStep()
-                                        save_step_data_from_runner()
-                                        time.sleep(0.05)
                                         
-
                                         time.sleep(time_between_tasks)
                                         st.rerun()
 

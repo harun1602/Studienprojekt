@@ -341,7 +341,7 @@ class StackChecker:
         """
         return {
             "variant": self.active_variant,
-            "step": self.current_step,
+            "step": self.current_step + 1,
             "box_live": self.box_live,
             "box_locked": self.box_locked,
             "box_is_locked": self.box_is_locked,

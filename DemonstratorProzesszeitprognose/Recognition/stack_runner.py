@@ -84,8 +84,7 @@ def main():
                 while True:
                     cmd = CMD_Q.get_nowait()
                     if cmd == "next":
-                        checker.next_step()
-                        STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())    
+                        checker.next_step()  
                     elif cmd == "reset":
                         checker.reset()
                     elif cmd.startswith("set_variant:"):
@@ -101,7 +100,8 @@ def main():
                 break
 
             # --- Frame Check ---
-            frame, ready = checker.check()
+            frame, ready = checker.check() 
+            STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())  
             if frame is None:
                 # nach z.B. 3 Sekunden ohne Frame => error
                 if "no_frame_since" not in STATUS:
