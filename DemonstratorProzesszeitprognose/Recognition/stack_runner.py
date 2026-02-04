@@ -18,6 +18,7 @@ STATUS = {
     "cam_state": "starting", 
     "cam_error": "",
     "variant": "",
+    "step_data": None,
 }
 
 class IPCManager(BaseManager):
@@ -27,10 +28,20 @@ class IPCManager(BaseManager):
 IPCManager.register("get_cmd_q", callable=lambda: CMD_Q)
 IPCManager.register("get_status", callable=lambda: STATUS)
 
+def _serialize_step_data(d: dict) -> dict:
+    def conv(x):
+        if isinstance(x, tuple):
+            return list(x)
+        if isinstance(x, list):
+            return [conv(v) for v in x]
+        if isinstance(x, dict):
+            return {k: conv(v) for k, v in x.items()}
+        return x
+    return conv(d)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="best.pt")
+    parser.add_argument("--model", default="best_yolo_small.pt")
     parser.add_argument("--variant", default="v2")
     parser.add_argument("--camera", type=int, default=1)
     parser.add_argument("--port", type=int, default=50055)
@@ -63,6 +74,7 @@ def main():
         
 
         STATUS["variant"] = args.variant
+        STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())
         STATUS["error"] = ""
         
         stop_loop = False
@@ -73,9 +85,7 @@ def main():
                     cmd = CMD_Q.get_nowait()
                     if cmd == "next":
                         checker.next_step()
-                    # if checker.is_done():
-                    #         STATUS["done"] = True
-                    #         raise KeyboardInterrupt
+                        STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())    
                     elif cmd == "reset":
                         checker.reset()
                     elif cmd.startswith("set_variant:"):
@@ -112,7 +122,7 @@ def main():
 
             # STATUS["variant"] = str(variant)
             # variant       = str(state["variant"])
-                   # Liste von dicts
+            #        Liste von dicts
 
             STATUS["ready"] = bool(ready)
             STATUS["step"] = int(checker.current_step)

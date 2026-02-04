@@ -29,14 +29,14 @@ def connect_manager():
     m.connect()
     return m
 
-def start_runner(variant="v1", camera="0"):
+def start_runner(variant="v1", camera="1"):
     proc = st.session_state.get("proc")
     if proc is not None and proc.poll() is None:
         print("Runner läuft schon – starte keinen zweiten.")
     else:
         ROOT = Path(__file__).resolve().parents[1]  
         RUNNER = ROOT / "Recognition" / "stack_runner.py"
-        MODEL  = ROOT / "Recognition" / "best.pt"
+        MODEL  = ROOT / "Recognition" / "best_yolo_small.pt"
 
         log_path = ROOT / "stack_runner.log"
         log_f = open(log_path, "a", encoding="utf-8")
@@ -88,10 +88,33 @@ def update_ready():
     try:
         m = connect_manager()
         status = m.get_status()
-        return dict(status)
+        return status
     except Exception as e:
         print(f"Runner nicht erreichbar: {e}")
         return {"ready": False, "running": False}
+
+def save_step_data_from_runner():
+    print("save_step_data_from_runner")
+    # try:
+    #     m = connect_manager()
+    #     m.get_cmd_q().put("snapshot")
+    # except Exception as e:
+    #     print(f"Snapshot nicht möglich: {e}")
+
+    time.sleep(1)
+
+    status = update_ready()
+    step_data = status.get("step_data")
+    if not step_data:
+        return False
+
+    cam_variant = step_data.get("variant")
+    cam_step = step_data.get("step")
+    cam_items = step_data.get("items", [])
+    print( cam_variant) 
+    print( cam_step)
+    print( cam_items)
+    return True
 
 def arbeitsplatz_page():
     # Setzen des Seitenlayouts
@@ -634,6 +657,9 @@ def arbeitsplatz_page():
 
                                         # Stack_runner nextStep übergeben
                                         runner_nextStep()
+                                        save_step_data_from_runner()
+                                        time.sleep(0.05)
+                                        
 
                                         time.sleep(time_between_tasks)
                                         st.rerun()
