@@ -9,20 +9,16 @@ from multiprocessing import Queue
 from stack_interface import StackChecker
 
 
-# -------- IPC Objects (werden per Manager geteilt) --------
-CMD_Q = Queue()   # Commands: "next", "stop", "reset", "set_variant:v2", ...
+# -------- IPC Objects --------
+# Eine Queue für die Befehle 
+CMD_Q = Queue()
+# Satates 
 STATUS = {
-    "running": False,
     "ready": False,
-    "cam_state": "starting",   # starting | ok | no_device | error
+    "cam_state": "starting", 
     "cam_error": "",
-    "step": 0,
-    "total_steps": 0,
     "variant": "",
-    "done": False,
-    "last_update": 0.0,
 }
-
 
 class IPCManager(BaseManager):
     pass
@@ -66,29 +62,33 @@ def main():
             STATUS["cam_error"] = str(e)
         
 
-        STATUS["running"] = True
         STATUS["variant"] = args.variant
-        STATUS["total_steps"] = len(checker.module_layouts[checker.active_variant])
         STATUS["error"] = ""
-
+        
+        stop_loop = False
         while True:
-            # --- Commands abarbeiten ---
+            # --- Commands der Queue abarbeiten ---
             try:
                 while True:
                     cmd = CMD_Q.get_nowait()
                     if cmd == "next":
                         checker.next_step()
+                    # if checker.is_done():
+                    #         STATUS["done"] = True
+                    #         raise KeyboardInterrupt
                     elif cmd == "reset":
                         checker.reset()
                     elif cmd.startswith("set_variant:"):
                         v = cmd.split(":", 1)[1].strip()
                         checker.set_variant(v)
                         STATUS["variant"] = v
-                        STATUS["total_steps"] = len(checker.module_layouts[checker.active_variant])
                     elif cmd == "stop":
-                        raise KeyboardInterrupt
+                        stop_loop = True
+                        break
             except Empty:
                 pass
+            if stop_loop:
+                break
 
             # --- Frame Check ---
             frame, ready = checker.check()
@@ -108,19 +108,19 @@ def main():
                 STATUS["cam_state"] = "ok"
                 STATUS["cam_error"] = ""
 
+            # variant, = checker.collect_step_data()
+
+            # STATUS["variant"] = str(variant)
+            # variant       = str(state["variant"])
+                   # Liste von dicts
+
             STATUS["ready"] = bool(ready)
             STATUS["step"] = int(checker.current_step)
             STATUS["done"] = bool(checker.is_done())
             STATUS["last_update"] = time.time()
 
             cv2.imshow("STACK CHECK", frame)
-            k = cv2.waitKey(1) & 0xFF
-
-            # Optional: Tastatur bleibt zusätzlich möglich
-            # if k == ord("q"):
-            #     break
-            # if k == ord("n"):
-            #     checker.next_step()
+            cv2.waitKey(1)
 
             if STATUS["done"]:
                 break
@@ -130,7 +130,7 @@ def main():
     except Exception as e:
         STATUS["error"] = str(e)
     finally:
-        STATUS["running"] = False
+        STATUS["cam_state"] = "stopped"
         try:
             if checker is not None:
                 checker.release()

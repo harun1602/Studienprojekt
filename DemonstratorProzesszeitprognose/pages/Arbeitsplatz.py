@@ -3,18 +3,13 @@ import threading
 from datetime import datetime
 import streamlit as st
 import pandas as pd
-from data.database_code import TaskProfile, Version, ComponentList, ComponentListRequiredCount, TaskComponentRequirement
+from data.database_code import TaskProfile, Version, ComponentList, TaskComponentRequirement
 import time
 
 from data.database_functions import load_images, save_task_steps, get_setting, save_task
 from navigation import make_sidebar
 from data.database_code import session
-
-from streamlit.runtime.scriptrunner import add_script_run_ctx
 from datetime import datetime
-import cv2
-from Recognition.stack_interface import StackChecker
-
 
 import sys
 import subprocess
@@ -25,7 +20,6 @@ AUTH = b"stackkey"
 
 class ClientManager(BaseManager):
     pass
-
 
 ClientManager.register("get_cmd_q")
 ClientManager.register("get_status")
@@ -40,13 +34,12 @@ def start_runner(variant="v1", camera="0"):
     if proc is not None and proc.poll() is None:
         print("Runner läuft schon – starte keinen zweiten.")
     else:
-        # Projekt-Root sauber bestimmen (ggf. parents[] anpassen!)
         ROOT = Path(__file__).resolve().parents[1]  
         RUNNER = ROOT / "Recognition" / "stack_runner.py"
         MODEL  = ROOT / "Recognition" / "best.pt"
 
-        # log_path = ROOT / "stack_runner.log"
-        # log_f = open(log_path, "a", encoding="utf-8")
+        log_path = ROOT / "stack_runner.log"
+        log_f = open(log_path, "a", encoding="utf-8")
 
         creationflags = 0
         # if sys.platform.startswith("win"):
@@ -61,11 +54,12 @@ def start_runner(variant="v1", camera="0"):
                 "--port", str(PORT),
                 "--auth", AUTH.decode("utf-8"),
             ],
-            cwd=str(ROOT),                 # <<< wichtig
-            # stdout=log_f, stderr=log_f,    # <<< wichtig: Fehler landen im Log
+            cwd=str(ROOT),                 
+            stdout=log_f, stderr=log_f,    
             creationflags=creationflags,
         )
         time.sleep(0.6)
+
 def beende_runner():
     try:
         m = connect_manager()
@@ -81,23 +75,22 @@ def beende_runner():
             pass
 
     st.session_state.proc = None
-    st.session_state.arbeitsplatz_stack_step_ready = False
+    st.session_state.cam_ok = False
 
 def runner_nextStep():
     try:
         m = connect_manager()
         m.get_cmd_q().put("next")
     except Exception as e:
-        st.warning(f"Runner nicht erreichbar: {e}")
+        print(f"Runner nicht erreichbar: {e}")
 
 def update_ready():
     try:
         m = connect_manager()
         status = m.get_status()
-        # status ist ein Proxy-Dict, Werte direkt lesbar
         return dict(status)
     except Exception as e:
-        st.warning(f"Runner nicht erreichbar: {e}")
+        print(f"Runner nicht erreichbar: {e}")
         return {"ready": False, "running": False}
 
 def arbeitsplatz_page():
@@ -140,33 +133,38 @@ def arbeitsplatz_page():
 
 
     time_between_tasks = 0
-    lapse = 0.1
-
-    # Funktion für Timer-Thread
-    def timer(timer_running):
-        start_time = time.time()
-        while timer_running.is_set():
-            elapsed_time = time.time() - start_time
-            st.session_state.time_elapsed = elapsed_time
-            time.sleep(lapse)
-
-    # Funktion für Countdown Thread
-    def countdown(seconds, countdown_running):
-        start_time = time.time()
-        while countdown_running.is_set() and seconds > 0:
-            elapsed_time = time.time() - start_time
-            remaining_time = seconds - elapsed_time
-            st.session_state.time_left = remaining_time
-            time.sleep(lapse)
 
     # Der Nutzer hat die Möglichkeit seine aktuelle Session zurückzusetzen, um an weiteren Aufgaben zu arbeiten
     def reset_page():
 
         # resets = ['time_elapsed', 'timer_thread', 'timer_running', 'time_left', 'countdown_thread', 'countdown_running', 'timer_placeholder', 'selected_version', 'current_task',]
-        resets = ['completed_tasks', 'remaining_tasks', 'current_profile', 'game_mode']
+        # resets = ['completed_tasks', 'remaining_tasks', 'current_profile', 'game_mode']
+        keys_to_clear = [
+        # Task / Steps
+        "current_task", "current_step", "start_time", "steps_times", "task_just_ended",
+
+        # Auswahl / Daten
+        "selected_version", "image_paths", "image_instructions", "images", "cover_image",
+
+        # Profile/Tasks
+        "completed_tasks", "remaining_tasks", "current_profile", "game_mode",
+
+        # Timer/Countdown Werte
+        "time_elapsed", "time_left", "timer_start_ts", "countdown_end_ts",
+
+        # Kamera/Runner
+        "start_pending", "pending_version", "cam_ok", "proc",
+
+        # Dialog / Tabelle
+        "show_component_dialog", "selected_component", "last_selected_component", "components_table_nonce",
+
+        # Flags
+        "confirm_missing_module", "force_advance",
+    ]
         # Delete all the items in Session state
-        for key in resets:
-            del st.session_state[key]
+        for key in keys_to_clear:
+            st.session_state.pop(key, None)
+            # del st.session_state[key]
 
     # Dialog, um sicherzugehen, dass Session zurückgesetzt werden soll
     @st.dialog("Aufgaben zurücksetzen")
@@ -176,25 +174,24 @@ def arbeitsplatz_page():
         if st.button("Zurücksetzen"):
             reset_page()
             st.rerun()
+    
     #Dialog, Wenn Modul nicht erkannt ist
-    @st.dialog("Modul wurde nicht erkannt")
+    @st.dialog("Bauteil wurde erkannt")
     def confirm_missing_module_dialog():
-        st.warning("Modul wurde nicht erkannt. Wollen Sie trotzdem fortfahren?")
+        st.warning("Das Bauteil wurde nicht erkannt. Möchten Sie trotzdem fortfahren?")
 
         col_yes, spacer, col_no = st.columns([1, 1.5, 1])
         with col_yes:
             if st.button("Ja, fortfahren",width="stretch"):
-                st.session_state.confirm_missing_module = False
-                st.session_state.force_advance = True
-                st.rerun()
+                advance_step_or_finish()
 
         with col_no:
             if st.button("Nein",width="stretch"):
-                st.session_state.confirm_missing_module = False
                 st.rerun()
+    
+    # Dialog, für mehr Infos eines Bauteil
     @st.dialog("Bauteil-Vorschau")
-    def component_dialog():
-        comp = st.session_state.selected_component
+    def component_dialog(comp):
         if not comp:
             st.info("Kein Bauteil ausgewählt.")
             return
@@ -206,7 +203,7 @@ def arbeitsplatz_page():
         path = comp.get("image_path")
         if path:
             img = Image.open(path)
-            img = ImageOps.exif_transpose(img)  # <-- korrigiert die EXIF-Drehung
+            img = ImageOps.exif_transpose(img)
             st.image(img, width="stretch")
         else:
             st.warning("Kein Bild für dieses Bauteil vorhanden.")
@@ -215,19 +212,48 @@ def arbeitsplatz_page():
         spacer, col = st.columns([8, 3])
         with col:
             if st.button("Schließen", width="stretch"):
-                st.session_state.show_component_dialog = False
-                st.session_state.last_selected_component = None
-                st.session_state.components_table_nonce += 1  # <-- Tabelle neu “mounten”
+                st.session_state.components_table_nonce += 1
                 st.rerun()
+    
+    def begin_task_after_cam_ok(version, current_user):
+        if st.session_state.current_task is not None:
+            return
+        
+        now_dt = datetime.now()
+
+        # Starte Gesamt-Task-Timer 
+        st.session_state.start_time = now_dt
+
+        # Starte Schritt-Tracking 
+        st.session_state.current_step = 0
+        st.session_state.steps_times = [{"start_time": now_dt}]
+
+        # Game-Mode Timer starten
+        if st.session_state.game_mode == "timer":
+            st.session_state.timer_running.set()
+            st.session_state.timer_start_ts = time.time()
+
+        elif st.session_state.game_mode == "countdown":
+            st.session_state.countdown_running.set()
+            st.session_state.countdown_end_ts = time.time() + version.time_limit
+            st.session_state.time_left = version.time_limit
+
+        # Task in DB anlegen
+        new_task = save_task(
+            user_id=current_user.id,
+            version_id=version.id,
+            start_timestamp=now_dt,
+            time=0,
+            game_mode=st.session_state.game_mode
+        )
+        st.session_state.current_task = new_task
 
 
     # ----- Nachfolgenden werden die session-states definiert, welche für das korrekte beibehalten von Informationen/Variablenzuständen über Seiten-Aktualisierungen (also alle Operationen die einen refresh triggern -> bspw Button-Drücken) hinweg benötigt werden
+    
     # Session State für Timer
     if 'time_elapsed' not in st.session_state:
         st.session_state.time_elapsed = 0.0
-
-    if 'timer_thread' not in st.session_state:
-        st.session_state.timer_thread = None
 
     if 'timer_running' not in st.session_state:
         st.session_state.timer_running = threading.Event()
@@ -292,47 +318,29 @@ def arbeitsplatz_page():
     if 'random_mode' not in st.session_state:
         st.session_state.random_mode = False
     
-    if "confirm_missing_module" not in st.session_state:
-        st.session_state.confirm_missing_module = False
-
-    if "force_advance" not in st.session_state:
-        st.session_state.force_advance = False
-    if "show_component_dialog" not in st.session_state:
-        st.session_state.show_component_dialog = False
-    if "selected_component" not in st.session_state:
-        st.session_state.selected_component = None
-    if "last_selected_component" not in st.session_state:
-        st.session_state.last_selected_component = None
+    # State für den Bauteil-Dialog
     if "components_table_nonce" not in st.session_state:
         st.session_state.components_table_nonce = 0
 
+    # States füt den neuen Timer
     if "timer_start_ts" not in st.session_state:
        st.session_state.timer_start_ts = None
 
     if "countdown_end_ts" not in st.session_state:
         st.session_state.countdown_end_ts = None
 
-    # --- Stack / Livecam States ---
-    if "stack_checker" not in st.session_state:
-        st.session_state.stack_checker = None
-
-    if "stack_cam_running" not in st.session_state:
-        st.session_state.stack_cam_running = False
-
-    if "arbeitsplatz_stack_step_ready" not in st.session_state:
-        st.session_state.arbeitsplatz_stack_step_ready = False
-    
-    if "stack_variant" not in st.session_state:
-        st.session_state.stack_variant = "v1"
-
-
+    # ---Livecam States ---
     if "proc" not in st.session_state:
        st.session_state.proc = None    
 
     if "cam_ok" not in st.session_state:
         st.session_state.cam_ok = False
 
+    if "start_pending" not in st.session_state:
+        st.session_state.start_pending = False
 
+    if "pending_version" not in st.session_state:
+        st.session_state.pending_version = None
 
     # Game_Modes
     modes = ["classic", "timer", "countdown"]
@@ -581,102 +589,29 @@ def arbeitsplatz_page():
                                     status_placeholder = st.empty()
 
                                 if 'current_task' in st.session_state and st.session_state.current_task is not None:
-
-                                    # Ausgabe, dass der Timer läuft
-
-                                    
-                                    while not st.session_state.cam_ok:
-                                        try:
-                                            m = connect_manager()
-                                            status = m.get_status()  # Proxy
-                                            cam_state = str(status.get("cam_state", "starting"))
-                                            if cam_state == "ok":
-                                                st.session_state.cam_ok = True
-                                        except Exception as e:
-                                            st.session_state.cam_ok = False
-                                            # status_ph.warning(f"⏳ Verbinde zum Runner … ({e})")
-
-                                    status_placeholder.success(f"Task '{version.name}' gestartet! Timer läuft...")
+                                    # Wenn Cam ist ok -> Ausgabe, dass der Timer läuft
+                                    if st.session_state.cam_ok:
+                                        status_placeholder.success(f"Task '{version.name}' gestartet! Timer läuft...")
 
                                 # Wenn "Starte Aufgabe" - Button gedrückt wird
-                                if st.button("Starte Aufgabe", disabled=True if st.session_state.current_task else False):
+                                if st.button("Starte Aufgabe",disabled=bool(st.session_state.current_task) or st.session_state.start_pending):
 
-                                    # Nur, wenn der "Starte Aufgabe" - Button nicht bereits vorher gedrückt wurde
-                                    if 'current_task' not in st.session_state or st.session_state.current_task is None:
-                                        # Falls Spielmodus 'Timer'
-                                        if st.session_state.game_mode == 'timer':
+                                    st.session_state.cam_ok = False
+                                    st.session_state.start_pending = True
+                                    st.session_state.pending_version = st.session_state.selected_version
 
-                                            # Starte Timer
-                                            if st.session_state.timer_thread is None or not st.session_state.timer_thread.is_alive():
-                                                # st.session_state.timer_running.set()  # Timer starten
-                                                # st.session_state.timer_thread = threading.Thread(target=timer, args=(
-                                                #     st.session_state.timer_running,))
-                                                # add_script_run_ctx(st.session_state.timer_thread)
-                                                # st.session_state.timer_thread.start()
-                                                st.session_state.timer_running.set()
-                                                st.session_state.timer_start_ts = time.time()   
+                                    map_version_to_cam = {
+                                        "Variante 1": "v1",
+                                        "Variante 2": "v2",
+                                        "Variante 3": "v3",
+                                        "Variante 4": "v4",
+                                    }
 
-                                        # Falls Spielmodus 'countdown'
-                                        if st.session_state.game_mode == 'countdown':
+                                    cam_version = map_version_to_cam.get(st.session_state.selected_version, "v1")
+                                    # Starte Cam auf dem externen Runner-Prozess
+                                    start_runner(variant=cam_version)
+                                    st.rerun()
 
-                                            # Starte Countdown
-                                            if st.session_state.countdown_thread is None or not st.session_state.countdown_thread.is_alive():
-                                                # st.session_state.countdown_running.set()  # Countdown starten
-                                                # version = session.query(Version).filter_by(
-                                                #     name=st.session_state.selected_version).first()
-                                                # st.session_state.countdown_thread = threading.Thread(target=countdown, args=(version.time_limit,
-                                                #     st.session_state.countdown_running,))
-                                                # add_script_run_ctx(st.session_state.countdown_thread)
-                                                # st.session_state.countdown_thread.start()
-                                                st.session_state.countdown_running.set()
-                                                st.session_state.countdown_end_ts = time.time() + version.time_limit
-                                                st.session_state.time_left = version.time_limit
-
-                                        # Ziehen der aktuellen Version
-                                        version = session.query(Version).filter_by(name=st.session_state.selected_version).first()
-                                        if version:
-                                            # Starte Timer für die gesamte Aufgabe
-                                            st.session_state.start_time = datetime.now()
-                                            # Starte Timer für den ersten Montageschritt
-                                            st.session_state.steps_times.append({'start_time': datetime.now()})
-
-                                            # Erstellen einer neuen Task in der Datenbank
-                                            #new_task = Task(user_id=current_user.id, version_id=version.id, start_timestamp=st.session_state.start_time, time=0, game_mode=st.session_state.game_mode)
-                                            #session.add(new_task)
-                                            #session.commit()
-
-                                            new_task = save_task(user_id=current_user.id, version_id=version.id, start_timestamp=st.session_state.start_time, time=0, game_mode=st.session_state.game_mode)
-
-                                            st.session_state.current_task = new_task
-
-                                            # start_stack_cam()
-                                            # if st.session_state.proc is None or st.session_state.proc.poll() is not None:
-                                            #     # NEW_CONSOLE -> separates Konsolenfenster (optional, OpenCV Fenster kommt sowieso)
-                                            #     creationflags = 0
-                                            #     if sys.platform.startswith("win"):
-                                            #         creationflags = subprocess.CREATE_NEW_CONSOLE
-
-                                            #     st.session_state.proc = subprocess.Popen(
-                                            #         [sys.executable, "stack_runner.py", "--model", "best.pt", "--variant", "v1",
-                                            #         "--camera", "1", "--port", str(PORT), "--auth", AUTH.decode("utf-8")],
-                                            #         creationflags=creationflags
-                                            #     )
-                                            #     time.sleep(0.6)  # kurz warten, bis IPC-Server da ist
-                                            start_runner()
-
-                                            with col2_2_1:
-                                                # Ausgabe, dass der Timer läuft
-                                                st.success(f"Task '{version.name}' gestartet! Timer läuft...")
-
-                                            st.rerun()
-                                        else:
-                                            st.error("Version nicht gefunden.")
-
-                                    # Sollte der Timer bereits laufen, gib Hinweis aus
-                                    else:
-                                        status_placeholder.warning("Die Aufgabe wurde bereits gestartet")
-                                        time.sleep(time_between_tasks)
-                                        status_placeholder.success("Timer läuft...")
 
                             with col2_3:
                                 def advance_step_or_finish():
@@ -697,9 +632,8 @@ def arbeitsplatz_page():
                                         st.session_state.steps_times.append({"start_time": end_time})
                                         st.session_state.current_step += 1
 
-                                        # >>> StackChecker Step mitziehen
+                                        # Stack_runner nextStep übergeben
                                         runner_nextStep()
-
 
                                         time.sleep(time_between_tasks)
                                         st.rerun()
@@ -751,83 +685,108 @@ def arbeitsplatz_page():
                                         with col2_2_2:
                                             st.success("Aufgabe abgeschlossen, Gut gemacht!")
                                         
-                                        #Aufgabe beenden
+                                        # Stack_runner beenden
                                         beende_runner()
+                                        st.session_state.cam_ok = False
                                         st.session_state.task_just_ended = True
                                         st.rerun()
                                
-                                if st.session_state.force_advance:
-                                    st.session_state.force_advance = False
-                                    advance_step_or_finish()
                                 # Nutzer drückt Beenden Knopf
                                 if st.button(label="Beende Schritt" if st.session_state.current_step < len(st.session_state.image_paths)-1 else "Beende Aufgabe", disabled=False if st.session_state.current_task else True):
                                     
+                                    # Bauteil von der Kamara erkannt? 
                                     status = update_ready()
                                     erkannt = bool(status.get("ready", False))
-
 
                                     # Wenn aktuell eine Aufgabe läuft
                                     if st.session_state.current_task:
                                         
-                                        
+                                        # Wenn Beuteil erkannt -> nächster Schritt/ Beenden
                                         if erkannt:
                                             advance_step_or_finish()
-                                            
+
+                                        # Wenn Beuteil nicht erkannt -> dialog öffnen
                                         else:
-                                            # Dialog öffnen
                                             confirm_missing_module_dialog()
                                     # Ausgabe, dass keine laufende Task gefunden wurde -> Keine Aufgabe wurde bisher gestartet
                                     else:
                                         st.error("Keine laufende Task gefunden.")
 
-                                # if st.session_state.confirm_missing_module:
-                                #     confirm_missing_module_dialog() 
                     # Ausgabe, dass keine weiteren Aufgaben zu erledigen sind
                     else:
                         st.success("Keine Aufgabe mehr zu erledigen für das aktuelle Aufgabenprofil! Gut Gemacht!")
 
             # Fortschrittsanzeige
             with (col3):
-                # livecam
+                # Den Status der Kamera beim Aufbau anzeigen
                 with st.container(border=True):
                     st.subheader("Kamera Status")
                     status_ph = st.empty()
+                    should_poll = (
+                        (st.session_state.start_pending or
+                        (st.session_state.current_task is not None and not st.session_state.task_just_ended))
+                        and not st.session_state.cam_ok
+                    )
+                    # Während die Kamera lädt, den Status anzeigen
+                    if should_poll:
+                        @st.fragment(run_every=1)
+                        def poll_cam():
+                            try:
+                                m = connect_manager()
+                                status = m.get_status()
+                                cam_state = str(status.get("cam_state", "starting"))
+                                cam_error = str(status.get("cam_error", ""))
+                                
+                                # Sobald die Kamera bereit ist, den Timer im nächsten Rerun starten 
+                                if cam_state == "ok":
+                                    st.session_state.cam_ok = True
+                                    status_ph.success("✅ Kamera ist ready")
 
-                    @st.fragment(run_every="1s")
-                    def poll_cam():
-                        try:
-                            m = connect_manager()
-                            status = m.get_status()  # Proxy
-                            cam_state = str(status.get("cam_state", "starting"))
-                            cam_error = str(status.get("cam_error", ""))
+                                    # >>> HIER erst Task + Timer starten
+                                    if st.session_state.start_pending:
+                                        version = session.query(Version).filter_by(name=st.session_state.pending_version).first()
+                                        if version:
+                                            begin_task_after_cam_ok(version, st.session_state.current_user)
+                                            st.session_state.start_pending = False
+                                            st.session_state.pending_version = None
+                                            st.rerun()
 
-                            if cam_state == "ok":
-                                st.session_state.cam_ok = True
-                                status_ph.success("✅ Kamera OK")
-                            elif cam_state == "no_device":
+                                elif cam_state in ("no_device", "error"):
+                                    st.session_state.cam_ok = False
+                                    status_ph.error(f"❌ Kamera-Problem: {cam_error}")
+
+                                    # wenn Start angefordert war -> abbrechen + runner beenden
+                                    if st.session_state.start_pending:
+                                        st.session_state.start_pending = False
+                                        st.session_state.pending_version = None
+                                        beende_runner()
+
+                                else:
+                                    st.session_state.cam_ok = False
+                                    status_ph.info("⏳ Kamera startet …")
+
+                            except Exception as e:
                                 st.session_state.cam_ok = False
-                                status_ph.error(f"❌ Keine Kamera: {cam_error}")
-                            elif cam_state == "error":
-                                st.session_state.cam_ok = False
-                                status_ph.error(f"❌ Kamera-Fehler: {cam_error}")
-                            else:
-                                st.session_state.cam_ok = False
-                                status_ph.info("⏳ Kamera startet …")
+                                status_ph.warning(f"⏳ Verbinde zum Runner … ({e})")
 
-                        except Exception as e:
-                            st.session_state.cam_ok = False
-                            status_ph.warning(f"⏳ Verbinde zum Runner … ({e})")
-
-                    poll_cam()
+                        poll_cam()
+                    else:
+                        # Sobald cam_ok einmal True ist, im nächsten Rerun nicht weiter aktualisieren; Status für die Schritte dauerhaft Ok anzeigen
+                        if st.session_state.cam_ok:
+                            status_ph.success("✅ Kamera ist ready")
+                        else:
+                            status_ph.info("Die Kamera startet automatisch, sobald eine Aufgabe startet.")
 
 
                 if st.session_state.game_mode != 'classic':
 
                     with st.container(border=True):
                         timer_ph = st.empty()
-
-                        @st.fragment(run_every=0.2)
+                        # Timer/Countdown mit st.fragment live anzeigen
+                        @st.fragment(run_every=0.5)
                         def render_timer():
+
+                            # Game_mode: Timer
                             if st.session_state.game_mode == "timer":
                                 if st.session_state.timer_running.is_set() and st.session_state.timer_start_ts is not None:
                                     st.session_state.time_elapsed = time.time() - st.session_state.timer_start_ts
@@ -841,6 +800,7 @@ def arbeitsplatz_page():
                                     unsafe_allow_html=True
                                 )
 
+                            # Game_mode: Countdown 
                             elif st.session_state.game_mode == "countdown":
                                 if st.session_state.countdown_running.is_set() and st.session_state.countdown_end_ts is not None:
                                     st.session_state.time_left = st.session_state.countdown_end_ts - time.time()
@@ -859,7 +819,7 @@ def arbeitsplatz_page():
                         render_timer()
 
                 if st.session_state.current_task is None:
-
+                    # Alle Bauteile für die Aufgabe zeigen
                     with st.container(border=True):
 
                         version = session.query(Version).filter_by(name=st.session_state.selected_version).first()
@@ -890,6 +850,7 @@ def arbeitsplatz_page():
                     if st.button("Reset"):
                         reset()
 
+                # Bauteile für den aktuellen Schritt
                 if st.session_state.current_task is not None and not st.session_state.task_just_ended:
 
                     with st.container(border=True):
@@ -900,7 +861,14 @@ def arbeitsplatz_page():
                         if version:
                             if st.session_state.current_step < len(st.session_state.image_paths):
 
-                                st.write(f"Bauteile für den Schritt {st.session_state.current_step}")
+                                st.markdown(
+                                    f"""
+                                    Bauteile für den Schritt {st.session_state.current_step}
+                                    <span style="font-size: 0.9em; cursor: help;"
+                                        title="Tipp: Sie können auf ein Bauteil in der Liste klicken, um mehr Infos zu bekommen.">  ℹ️</span>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
 
                                 # Ziehe die aktuellen Schritt-Informationen über das Image des Schrittes
                                 current_image = version.images[st.session_state.current_step]
@@ -913,44 +881,39 @@ def arbeitsplatz_page():
                                     rows.append({
                                         "Bauteil": rc.component.name,
                                         "Anzahl": rc.count,
-                                        "_img": getattr(rc.component, "component_image_path", None)  # <-- ggf. Feldnamen anpassen
+                                        "_img": getattr(rc.component, "component_image_path", None)  
                                     })
 
+                                # Konvertiere die Liste in ein DataFrame
                                 df = pd.DataFrame(rows)
 
                                 if df.empty:
                                     st.warning("Keine Bauteile für diesen Schritt angegeben.")
                                 else:
+                                    # Tabelle anzeigen (klickbare Auswahl aktiviert)
                                     event = st.dataframe(
                                         df[["Bauteil", "Anzahl"]],
-                                        use_container_width=True,   # statt width="stretch"
+                                        use_container_width=True,
                                         hide_index=True,
                                         key=f"components_step_{st.session_state.current_step}_{st.session_state.components_table_nonce}",
                                         selection_mode="single-cell",
                                         on_select="rerun",
                                     )
 
+                                    # Ausgewählte Zeile aus der Zell-Auswahl bestimmen
                                     row_idx = None
                                     if hasattr(event, "selection") and getattr(event.selection, "cells", None):
                                         row_idx = event.selection.cells[0][0]
 
+                                     # Wenn etwas ausgewählt wurde -> Dialog mit Details öffnen
                                     if row_idx is not None:
-                                        name = df.loc[row_idx, "Bauteil"]
-                                        st.session_state.last_selected_component = name
-                                        st.session_state.selected_component = {
-                                            "name": name,
+                                        component_dialog({
+                                            "name": df.loc[row_idx, "Bauteil"],
                                             "count": int(df.loc[row_idx, "Anzahl"]),
                                             "image_path": df.loc[row_idx, "_img"],
-                                        }
-                                        st.session_state.show_component_dialog = True
-
-                                    if st.session_state.show_component_dialog:
-                                        component_dialog()
-
+                                        })
                             else:
                                 st.warning("Keine Bauteile für diesen Schritt angegeben.")
-
-
         # Ausgabe, wenn kein Aufgabenprofil in der Datenbank hinterlegt ist
         else:
             st.error("Es konnte kein Aufgabenprofil gefunden. Bitte deinen Admin eines anzulegen.")

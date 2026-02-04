@@ -494,6 +494,8 @@ class StackChecker:
         if not ret:
             return None, False
 
+        ok = False
+
         r = self.model.track(frame, conf=self.CONF, imgsz=self.IMGSZ, persist=True, verbose=False)[0]
         out = frame.copy()
 
@@ -613,24 +615,3 @@ class StackChecker:
         self.cap.release()
         cv2.destroyAllWindows()
 
-
-if __name__ == "__main__":
-    checker = StackChecker("best-v0.pt")
-    checker.set_variant("v3")
-
-    try:
-        while not checker.is_done():
-            frame, ready = checker.check()
-            if frame is None:
-                continue
-
-            cv2.imshow("STACK CHECK", frame)
-            k = cv2.waitKey(1) & 0xFF
-            if k == ord("q"):
-                break
-            if k == ord("n"):
-                step_data = checker.collect_step_data()
-                save_step_to_database(step_data)
-                checker.next_step()
-    finally:
-        checker.release()
