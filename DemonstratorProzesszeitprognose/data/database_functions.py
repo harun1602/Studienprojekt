@@ -2,6 +2,7 @@ import shutil
 import pandas as pd
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
+import json
 
 from data.database_code import User, Image, Task, TaskStep, TaskProfile, Version, TaskProfileRequiredCount, Setting, \
     VersionHistory, ImageHistory, Component, ComponentListRequiredCount, component_list_components_association, ComponentList, ComponentListRequiredCount, TaskComponentRequirement
@@ -112,25 +113,26 @@ def save_task(user_id, version_id, time, start_timestamp, game_mode):
 
 # Funktion zum Speichern der Montageschritte in der Datenbank
 def save_task_steps(task_id, steps_times):
-
     """
-    Funktion zum Speichern der Montageschritte in der Datenbank
-
-    Args:
-        task_id: Die ID der Aufgabe,
-        steps_times: Die benötigten Zeiten für die TaskSteps
+    Speichert alle Montageschritte inkl. Runner-Daten in der DB.
+    Runner-Items werden als JSON-String gespeichert.
     """
-
     for idx, step in enumerate(steps_times):
+        # JSON-String für die Items
+        items_json = json.dumps(step.get("runner_items", [])) if step.get("runner_items") is not None else None
+    
         new_step = TaskStep(
             task_id=task_id,
             step_number=idx + 1,
-            start_time=step['start_time'],
-            end_time=step['end_time'],
-            time_spent=step['time_spent']
+            start_time=step["start_time"],
+            end_time=step.get("end_time"),
+            time_spent=step.get("time_spent"),
+            variant=step.get("runner_variant"),
+            items=items_json
         )
         session.add(new_step)
     session.commit()
+
 
 # Erstelle neue Version
 def create_new_version(name, description, complexity, cover_image_path, time_limit, images):
@@ -371,29 +373,48 @@ def load_task_data(user_id=None):
 def load_task_steps(task_id):
     """
     Lade alle Task-Steps (Montageschritte) aus der lokalen Datenbank
+    und konvertiere gespeicherte Items JSON zurück in verschachtelte Spalten.
 
     Args:
        task_id: Aufgaben-ID, von welcher die Schritte geladen werden sollen
 
     Returns:
-       pd.DataFrame: Alle Aufgabenschritte für die Aufgabe
+       pd.DataFrame: Alle Aufgabenschritte für die Aufgabe, Items als separate Spalten
     """
     # Ziehen aller Task Steps
     steps = session.query(TaskStep).filter_by(task_id=task_id).all()
-    if steps:
-        # Erstelle pd.DataFrame
-        steps_data = pd.DataFrame([
-            {
-                'Schritt_Nr': step.step_number,
-                'Start': step.start_time,
-                'Ende': step.end_time,
-                'Zeit': step.time_spent
-            }
-            for step in steps
+    
+    if not steps:
+        return pd.DataFrame(columns=[
+            'Schritt_Nr', 'Start', 'Ende', 'Zeit', 'Variante', 'label', 'detected', 
+            'det_xyxy', 'confidence', 'overlap', 'min_overlap', 'ok', 'tracking_id', 'zone'
         ])
-        return steps_data
+    
+    # Basis DataFrame
+    steps_data = pd.DataFrame([
+        {
+            'Schritt_Nr': step.step_number,
+            'Start': step.start_time,
+            'Ende': step.end_time,
+            'Zeit': step.time_spent,
+            'Variante': step.variant,
+            'Items': json.loads(step.items) if step.items else []
+        }
+        for step in steps
+    ])
+    
+    steps_exploded = steps_data.explode("Items").reset_index(drop=True)
+    
+   
+    if not steps_exploded["Items"].isna().all():
+        items_normalized = pd.json_normalize(steps_exploded["Items"])
+        df_final = pd.concat([steps_exploded.drop(columns=["Items"]), items_normalized], axis=1)
     else:
-        return pd.DataFrame(columns=['Schritt_Nr', 'Start', 'Ende', 'Zeit'])
+        df_final = steps_exploded.drop(columns=["Items"])
+    
+    return df_final
+
+
 
 
 def get_users():

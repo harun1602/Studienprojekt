@@ -9,19 +9,17 @@ from multiprocessing import Queue
 from stack_interface import StackChecker
 
 
-# -------- IPC Objects (werden per Manager geteilt) --------
-CMD_Q = Queue()   # Commands: "next", "stop", "reset", "set_variant:v2", ...
+# -------- IPC Objects --------
+# Eine Queue für die Befehle 
+CMD_Q = Queue()
+# Satates 
 STATUS = {
-    "running": False,
     "ready": False,
-    "step": 0,
-    "total_steps": 0,
+    "cam_state": "starting", 
+    "cam_error": "",
     "variant": "",
-    "done": False,
-    "last_update": 0.0,
-    "error": ""
+    "step_data": None,
 }
-
 
 class IPCManager(BaseManager):
     pass
@@ -30,10 +28,20 @@ class IPCManager(BaseManager):
 IPCManager.register("get_cmd_q", callable=lambda: CMD_Q)
 IPCManager.register("get_status", callable=lambda: STATUS)
 
+def _serialize_step_data(d: dict) -> dict:
+    def conv(x):
+        if isinstance(x, tuple):
+            return list(x)
+        if isinstance(x, list):
+            return [conv(v) for v in x]
+        if isinstance(x, dict):
+            return {k: conv(v) for k, v in x.items()}
+        return x
+    return conv(d)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="best.pt")
+    parser.add_argument("--model", default="best_yolo_small.pt")
     parser.add_argument("--variant", default="v2")
     parser.add_argument("--camera", type=int, default=1)
     parser.add_argument("--port", type=int, default=50055)
@@ -53,35 +61,68 @@ def main():
     try:
         checker = StackChecker(args.model, camera_index=args.camera)
         checker.set_variant(args.variant)
+        try:
+            if not checker.cap.isOpened():
+                STATUS["cam_state"] = "no_device"
+                STATUS["cam_error"] = f"Kamera Index {args.camera} konnte nicht geöffnet werden."
+            else:
+                STATUS["cam_state"] = "starting"
+                STATUS["cam_error"] = ""
+        except Exception as e:
+            STATUS["cam_state"] = "error"
+            STATUS["cam_error"] = str(e)
+        
 
-        STATUS["running"] = True
         STATUS["variant"] = args.variant
-        STATUS["total_steps"] = len(checker.module_layouts[checker.active_variant])
+        STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())
         STATUS["error"] = ""
-
+        
+        stop_loop = False
         while True:
-            # --- Commands abarbeiten ---
+            # --- Commands der Queue abarbeiten ---
             try:
                 while True:
                     cmd = CMD_Q.get_nowait()
                     if cmd == "next":
-                        checker.next_step()
+                        checker.next_step()  
                     elif cmd == "reset":
                         checker.reset()
                     elif cmd.startswith("set_variant:"):
                         v = cmd.split(":", 1)[1].strip()
                         checker.set_variant(v)
                         STATUS["variant"] = v
-                        STATUS["total_steps"] = len(checker.module_layouts[checker.active_variant])
                     elif cmd == "stop":
-                        raise KeyboardInterrupt
+                        stop_loop = True
+                        break
             except Empty:
                 pass
+            if stop_loop:
+                break
 
             # --- Frame Check ---
-            frame, ready = checker.check()
+            frame, ready = checker.check() 
+            STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())  
             if frame is None:
+                # nach z.B. 3 Sekunden ohne Frame => error
+                if "no_frame_since" not in STATUS:
+                    STATUS["no_frame_since"] = time.time()
+                if time.time() - STATUS["no_frame_since"] > 3.0:
+                    STATUS["cam_state"] = "error"
+                    STATUS["cam_error"] = f"Keine Frames von Kamera Index {args.camera} (Backend/Blockiert?)."
+                else:
+                    STATUS["cam_state"] = "starting"
+                time.sleep(0.05)
                 continue
+            else:
+                STATUS.pop("no_frame_since", None)
+                STATUS["cam_state"] = "ok"
+                STATUS["cam_error"] = ""
+
+            # variant, = checker.collect_step_data()
+
+            # STATUS["variant"] = str(variant)
+            # variant       = str(state["variant"])
+            #        Liste von dicts
 
             STATUS["ready"] = bool(ready)
             STATUS["step"] = int(checker.current_step)
@@ -89,13 +130,7 @@ def main():
             STATUS["last_update"] = time.time()
 
             cv2.imshow("STACK CHECK", frame)
-            k = cv2.waitKey(1) & 0xFF
-
-            # Optional: Tastatur bleibt zusätzlich möglich
-            if k == ord("q"):
-                break
-            if k == ord("n"):
-                checker.next_step()
+            cv2.waitKey(1)
 
             if STATUS["done"]:
                 break
@@ -105,7 +140,7 @@ def main():
     except Exception as e:
         STATUS["error"] = str(e)
     finally:
-        STATUS["running"] = False
+        STATUS["cam_state"] = "stopped"
         try:
             if checker is not None:
                 checker.release()

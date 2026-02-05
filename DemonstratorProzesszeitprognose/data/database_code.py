@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Table, Double, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Text, Table, Double, Boolean,Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -64,14 +64,9 @@ class User(Base):
 
 
 # Definition Tabelle für einzelnen Aufgaben-Schritte
+
+
 class TaskStep(Base):
-    """
-    Tabelle für einzelnen Aufgaben-Schritte.
-
-    Relationships:
-
-    task: Verweis auf die zugeordnete Aufgabe
-    """
     __tablename__ = 'task_steps'
 
     id = Column(Integer, primary_key=True)
@@ -80,8 +75,12 @@ class TaskStep(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=True)
     time_spent = Column(Integer, nullable=True)
+    
+    variant = Column(String, nullable=True)
+    items = Column(Text, nullable=True) 
 
     task = relationship('Task', back_populates='task_steps')
+
 
 
 # Definition Tabelle Gesamtaufgabe
@@ -299,13 +298,25 @@ class ComponentListRequiredCount(Base):
 
 class TaskComponentRequirement(Base):
     __tablename__ = 'task_component_requirements'
-    id = Column(Integer, primary_key=True)
-    image_id = Column(Integer, ForeignKey('images.id'))
-    component_id = Column(Integer, ForeignKey('components.id'))
-    count = Column(Integer, nullable=False)
 
+    id = Column(Integer, primary_key=True)
+
+
+    image_id = Column(Integer, ForeignKey('images.id'), nullable=False)
     image = relationship('Image', back_populates='required_components')
+
+    # FK zu Component
+    component_id = Column(Integer, ForeignKey('components.id'), nullable=False)
     component = relationship('Component')
+
+    # Normale Felder
+    count = Column(Integer, nullable=False)
+    confidence = Column(Float)
+    overlap = Column(Float)
+
+    # Neue Felder für Variante und Schritt
+    variant = Column(String)
+    step = Column(Integer)
 
 
 
