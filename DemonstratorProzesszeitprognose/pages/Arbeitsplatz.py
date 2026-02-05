@@ -248,7 +248,15 @@ def arbeitsplatz_page():
             if st.button("Schließen", width="stretch"):
                 st.session_state.components_table_nonce += 1
                 st.rerun()
-    
+                
+    def map_version_to_cam(selected):
+        try:
+            nummer = selected.split(" ")[1]
+            cam_version = f"v{nummer}"
+        except (IndexError, AttributeError):
+            cam_version = "v1"  # Fallback / Default
+        return cam_version
+        
     def begin_task_after_cam_ok(version, current_user):
         if st.session_state.current_task is not None:
             return
@@ -634,14 +642,9 @@ def arbeitsplatz_page():
                                     st.session_state.start_pending = True
                                     st.session_state.pending_version = st.session_state.selected_version
 
-                                    map_version_to_cam = {
-                                        "Variante 1": "v1",
-                                        "Variante 2": "v2",
-                                        "Variante 3": "v3",
-                                        "Variante 4": "v4",
-                                    }
-
-                                    cam_version = map_version_to_cam.get(st.session_state.selected_version, "v1")
+                                    selected = st.session_state.selected_version
+                                    cam_version = map_version_to_cam(selected)
+                                    
                                     # Starte Cam auf dem externen Runner-Prozess
                                     start_runner(variant=cam_version)
                                     st.rerun()
