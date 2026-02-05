@@ -334,6 +334,7 @@ class StackChecker:
 
         #  -------------------- DATENSAMMLER-FUNKTION (WICHTIG) --------------------
 
+
     def collect_step_data(self):
         """
         Gibt ALLE relevanten Infos des aktuellen Schritts zurück

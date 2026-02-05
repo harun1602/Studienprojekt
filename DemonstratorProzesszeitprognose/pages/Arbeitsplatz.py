@@ -29,7 +29,7 @@ def connect_manager():
     m.connect()
     return m
 
-def start_runner(variant="v1", camera="1"):
+def start_runner(variant="v1", camera="0"):
     proc = st.session_state.get("proc")
     if proc is not None and proc.poll() is None:
         print("Runner läuft schon – starte keinen zweiten.")
@@ -96,20 +96,36 @@ def update_ready():
         return {"ready": False, "running": False}
 
 def save_step_data_from_runner():
+    """
+    Holt die aktuellen Daten vom Runner (Variante, Schritt, Items).
+
+    Returns:
+        dict oder None: Ein Dictionary mit keys:
+            - 'variant': str
+            - 'step': int
+            - 'items': list
+        oder None, wenn keine Daten vorhanden sind.
+    """
     print("save_step_data_from_runner")
 
     status = update_ready()
     step_data = status.get("step_data")
     if not step_data:
-        return False
+        return None
 
-    cam_variant = step_data.get("variant")
-    cam_step = step_data.get("step")
-    cam_items = step_data.get("items", [])
-    print( cam_variant) 
-    print( cam_step)
-    print( cam_items)
-    return True
+    runner_info = {
+        "variant": step_data.get("variant"),
+        "step": step_data.get("step"),
+        "items": step_data.get("items", [])
+    }
+
+    print(runner_info["variant"])
+    print(runner_info["step"])
+    print(runner_info["items"])
+
+    return runner_info
+
+    
 
 def arbeitsplatz_page():
     # Setzen des Seitenlayouts
@@ -646,6 +662,12 @@ def arbeitsplatz_page():
                                             previous_step["end_time"] = end_time
                                             previous_step["time_spent"] = (end_time - previous_step["start_time"]).total_seconds()
 
+                                        runner_data = save_step_data_from_runner()
+                                        if runner_data:
+                                                previous_step["runner_variant"] = runner_data["variant"]
+                                                previous_step["runner_step"] = runner_data["step"]
+                                                previous_step["runner_items"] = runner_data["items"]
+                                        print(previous_step)
                                         # Starte den nächsten Schritt
                                         st.session_state.steps_times.append({"start_time": end_time})
                                         st.session_state.current_step += 1
@@ -675,11 +697,19 @@ def arbeitsplatz_page():
                                         session.commit()
 
                                         # Letzter Eintrag wird gefüllt
-                                        st.session_state.steps_times[st.session_state.current_step]["end_time"] = end_time
-                                        st.session_state.steps_times[st.session_state.current_step]["time_spent"] = (
-                                            end_time - st.session_state.steps_times[st.session_state.current_step]["start_time"]
-                                        ).total_seconds()
+                                        last_step = st.session_state.steps_times[st.session_state.current_step]
+                                        last_step["end_time"] = end_time
+                                        last_step["time_spent"] = (end_time - last_step["start_time"]).total_seconds()
 
+                                        # --- Runner-Daten für den letzten Schritt hinzufügen ---
+                                        runner_data = save_step_data_from_runner()
+                                        if runner_data:
+                                            last_step["runner_variant"] = runner_data["variant"]
+                                            last_step["runner_step"] = runner_data["step"]
+                                            last_step["runner_items"] = runner_data["items"]
+
+                                        print(last_step)
+                                        print(st.session_state.steps_times)
                                         # speichere die Montage-Schritte der aktuellen Aufgabe
                                         save_task_steps(task.id, st.session_state.steps_times)
 
