@@ -347,6 +347,11 @@ class StackChecker:
             "box_locked": self.box_locked,
             "box_is_locked": self.box_is_locked,
             "items": self._last_step_items.copy()
+             
+#               [{'label': 'yellow_cable_input', 'zone': [338, 330, 365, 360], 'detected': False, 'det_xyxy': None, 'confidence': None, 'overlap': 0.0, 'min_overlap': 0.9, 'ok': False, 'tracking_id': None}, {'label': 'yellow_cable_input', 'zone': [338, 330, 365, 
+# 360], 'detected': True, 'det_xyxy': None, 'confidence': None, 'overlap': 0.0, 'min_overlap': 0.9, 'ok': True, 'tracking_id': None}]
+             
+            
         }
 
     # -------------------- Drawing helpers --------------------
@@ -512,9 +517,46 @@ class StackChecker:
 
         self.box_live = self._find_best_box(r, "Box")
 
+        self._last_step_matches = []
+        self._last_step_items = []
+
         # --- Step 0: Box-Step ---
         if self.current_step == 0:
+            box_conf = None
+            box_tid = None
+            if r.boxes is not None:
+                best_conf = -1.0
+                best_tid = None
+                for b in r.boxes:
+                    if self.model.names[int(b.cls[0])] != "Box":
+                        continue
+                    conf = float(b.conf[0])
+                    if conf < self.CONF:
+                        continue
+                    if conf > best_conf:
+                        best_conf = conf
+                        try:
+                            best_tid = int(b.id[0]) if hasattr(b, "id") and b.id is not None else None
+                        except Exception:
+                            best_tid = None
+                if best_conf >= 0:
+                    box_conf = best_conf
+                    box_tid = best_tid
+
             ok = self.box_live is not None
+
+            self._last_step_items.append({
+                "label": "Box",
+                "zone": None,                 # im Box-Step gibt es keine Zielzone
+                "detected": ok,
+                "det_xyxy": self.box_live,    # hier die Box-Koordinaten
+                "confidence": box_conf,       # optional, kann None sein
+                "overlap": None,              # nicht relevant
+                "min_overlap": None,           # nicht relevant
+                "ok": ok,
+                "tracking_id": box_tid         # optional, kann None sein
+            })
+
             if ok:
                 self._draw_box(out, self.box_live, text="BOX (LIVE)")
                 self._draw_midline(out, self.box_live)
@@ -539,8 +581,7 @@ class StackChecker:
                 step_min_overlap = float(step.get("min_overlap", self.DEFAULT_MIN_OVERLAP))
 
                 ok = True
-                self._last_step_matches = []
-                self._last_step_items = []
+                
 
                 for item in step.get("items", []):
                     label = item["label"]

@@ -24,115 +24,137 @@ class ClientManager(BaseManager):
 ClientManager.register("get_cmd_q")
 ClientManager.register("get_status")
 
-def connect_manager():
-    m = ClientManager(address=("127.0.0.1", PORT), authkey=AUTH)
-    m.connect()
-    return m
-
-def start_runner(variant="v1", camera="0"):
-    proc = st.session_state.get("proc")
-    if proc is not None and proc.poll() is None:
-        print("Runner läuft schon – starte keinen zweiten.")
-    else:
-        ROOT = Path(__file__).resolve().parents[1]  
-        RUNNER = ROOT / "Recognition" / "stack_runner.py"
-        MODEL  = ROOT / "Recognition" / "best_yolo_small.pt"
-
-        log_path = ROOT / "stack_runner.log"
-        log_f = open(log_path, "a", encoding="utf-8")
-
-        creationflags = 0
-        # if sys.platform.startswith("win"):
-        #     creationflags = subprocess.CREATE_NEW_CONSOLE
-
-        st.session_state.proc = subprocess.Popen(
-            [
-                sys.executable, "-u", str(RUNNER),
-                "--model", str(MODEL),
-                "--variant", variant,
-                "--camera", str(camera),
-                "--port", str(PORT),
-                "--auth", AUTH.decode("utf-8"),
-            ],
-            cwd=str(ROOT),                 
-            stdout=log_f, stderr=log_f,    
-            creationflags=creationflags,
-        )
-        time.sleep(0.6)
-
-def beende_runner():
-    save_step_data_from_runner()
-    try:
-        m = connect_manager()
-        m.get_cmd_q().put("stop")
-    except Exception:
-        pass
-
-    proc = st.session_state.get("proc")
-    if proc is not None and proc.poll() is None:
-        try:
-            proc.terminate()
-        except Exception:
-            pass
-
-    st.session_state.proc = None
-    st.session_state.cam_ok = False
-
-def runner_nextStep():
-    save_step_data_from_runner()
-    try:
-        m = connect_manager()
-        m.get_cmd_q().put("next")
-    except Exception as e:
-        print(f"Runner nicht erreichbar: {e}")
-
-def update_ready():
-    try:
-        m = connect_manager()
-        status = m.get_status()
-        return status
-    except Exception as e:
-        print(f"Runner nicht erreichbar: {e}")
-        return {"ready": False, "running": False}
-
-def save_step_data_from_runner():
-    """
-    Holt die aktuellen Daten vom Runner (Variante, Schritt, Items).
-
-    Returns:
-        dict oder None: Ein Dictionary mit keys:
-            - 'variant': str
-            - 'step': int
-            - 'items': list
-        oder None, wenn keine Daten vorhanden sind.
-    """
-    print("save_step_data_from_runner")
-
-    status = update_ready()
-    step_data = status.get("step_data")
-    if not step_data:
-        return None
-
-    runner_info = {
-        "variant": step_data.get("variant"),
-        "step": step_data.get("step"),
-        "items": step_data.get("items", [])
-    }
-
-    print(runner_info["variant"])
-    print(runner_info["step"])
-    print(runner_info["items"])
-
-    return runner_info
-
-    
-
 def arbeitsplatz_page():
     # Setzen des Seitenlayouts
     st.set_page_config(
         page_title="ProScheduler: Arbeitsplatz",
         initial_sidebar_state="expanded",
         layout="wide")
+    
+
+    def connect_manager():
+        m = ClientManager(address=("127.0.0.1", PORT), authkey=AUTH)
+        m.connect()
+        return m
+
+    def start_runner(variant="v1", camera="0"):
+        proc = st.session_state.get("proc")
+        if proc is not None and proc.poll() is None:
+            print("Runner läuft schon – starte keinen zweiten.")
+        else:
+            ROOT = Path(__file__).resolve().parents[1]  
+            RUNNER = ROOT / "Recognition" / "stack_runner.py"
+            MODEL  = ROOT / "Recognition" / "best_yolo_small.pt"
+
+            log_path = ROOT / "stack_runner.log"
+            log_f = open(log_path, "a", encoding="utf-8")
+
+            creationflags = 0
+            st.session_state.proc = subprocess.Popen(
+                [
+                    sys.executable, "-u", str(RUNNER),
+                    "--model", str(MODEL),
+                    "--variant", variant,
+                    "--camera", str(camera),
+                    "--port", str(PORT),
+                    "--auth", AUTH.decode("utf-8"),
+                ],
+                cwd=str(ROOT),                 
+                stdout=log_f, stderr=log_f,    
+                creationflags=creationflags,
+            )
+            time.sleep(0.6)
+
+    def beende_runner():
+        try:
+            m = connect_manager()
+            m.get_cmd_q().put("stop")
+        except Exception:
+            pass
+
+        proc = st.session_state.get("proc")
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+
+        st.session_state.proc = None
+        st.session_state.cam_ok = False
+
+    def runner_nextStep():
+        try:
+            m = connect_manager()
+            m.get_cmd_q().put("next")
+        except Exception as e:
+            print(f"Runner nicht erreichbar: {e}")
+
+    def update_ready():
+        try:
+            m = connect_manager()
+            status = m.get_status()
+            return status
+        except Exception as e:
+            print(f"Runner nicht erreichbar: {e}")
+            return {"ready": False, "running": False}
+
+    def save_step_data_from_runner():
+        """
+        Holt die aktuellen Daten vom Runner (Variante, Schritt, Items).
+
+        Returns:
+            dict oder None: Ein Dictionary mit keys:
+                - 'variant': str
+                - 'step': int
+                - 'items': list
+            oder None, wenn keine Daten vorhanden sind.
+        """
+        print("save_step_data_from_runner")
+
+        status = update_ready()
+        step_data = status.get("step_data")
+        if not step_data:
+            return None
+
+        runner_info = {
+            "variant": step_data.get("variant"),
+            "step": step_data.get("step"),
+            "items": step_data.get("items", [])
+        }
+
+        print(runner_info["variant"])
+        print(runner_info["step"])
+        print(runner_info["items"])
+
+        return runner_info
+    # Methode, um Bauteil-Labels in verständliche Namen zu übersetzen
+    def map_BauteileName(label: str) -> str:
+        mapping = {
+            "Box": "Box",
+
+            "cable ending": "Kabelende",
+            "big cable ending": "Großes Kabelende",
+
+            "cable input": "Kabeleingang",
+            "yellow_cable_input": "Eingang gelbes Kabel",
+
+            "yellow module": "Gelbes Modul",
+            "Blue Module": "Blaues Modul",
+            "small gray module": "Kleines graues Modul",
+            "big gray module": "Großes graues Modul",
+            "gray orange module": "Grau-oranges Modul",
+            "black module": "Schwarzes Modul",
+
+            "35mm": "35-mm Platzhalter",
+
+            "groin": "Schiene",
+            "screw": "Schraube",
+            "round gray thing": "Rundes graues Teil",
+        }
+
+        return mapping.get(label, label)
+
+  
 
     # Einladen der Sidebar für die Navigation zwischen den Seiten
     make_sidebar()
@@ -210,10 +232,35 @@ def arbeitsplatz_page():
             st.rerun()
     
     #Dialog, Wenn Modul nicht erkannt ist
-    @st.dialog("Bauteil wurde erkannt")
+    @st.dialog("Bauteil wurde nicht erkannt")
     def confirm_missing_module_dialog():
-        st.warning("Das Bauteil wurde nicht erkannt. Möchten Sie trotzdem fortfahren?")
+        st.warning("Mindestens ein Bauteil wurde nicht erkannt. Möchten Sie trotzdem fortfahren?",icon=":material/warning:")
 
+        # wandelt das Icon zu einem farbigen HTML-Icon um
+        def micon(icon_name: str, color: str) -> str:
+            return (
+                f'<span class="material-symbols-rounded" '
+                f'style="color:{color}; vertical-align: inherit;">'
+                f'{":material/"+icon_name}</span>'
+            )
+
+        # alle Bauteile vom stack_runner bekommen
+        status = update_ready()
+        bauteile = status.get("bauteile")
+        if not bauteile:
+            st.info("Keine Bauteile vorhanden.")
+        else:
+            lines = []
+            for name, ok in bauteile:
+                # Icon mit der Hilfsmethode setzen
+                icon = micon("check:", "green") if ok else micon("close:", "red")
+                name = map_BauteileName(name)
+                lines.append(f"- {name} {icon}")
+            # Bauteile untereinander anzeigen
+            st.markdown("Bauteile:")
+            st.markdown("\n".join(lines),unsafe_allow_html=True)
+
+        # Buttons zum Schritt-Überspringen oder Abbrechen
         col_yes, spacer, col_no = st.columns([1, 1.5, 1])
         with col_yes:
             if st.button("Ja, fortfahren",width="stretch"):
@@ -804,7 +851,7 @@ def arbeitsplatz_page():
 
                                 elif cam_state in ("no_device", "error"):
                                     st.session_state.cam_ok = False
-                                    status_ph.error(f"❌ Kamera-Problem: {cam_error}")
+                                    status_ph.error(f"Kamera-Problem: {cam_error}")
 
                                     # wenn Start angefordert war -> abbrechen + runner beenden
                                     if st.session_state.start_pending:
@@ -915,8 +962,8 @@ def arbeitsplatz_page():
                                 st.markdown(
                                     f"""
                                     Bauteile für den Schritt {st.session_state.current_step}
-                                    <span style="font-size: 0.9em; cursor: help;"
-                                        title="Tipp: Sie können auf ein Bauteil in der Liste klicken, um mehr Infos zu bekommen.">  ℹ️</span>
+                                    <span style="font-size: 1em; cursor: help;"
+                                        title="Tipp: Sie können auf ein Bauteil in der Liste klicken, um mehr Infos zu bekommen.">  :material/info: </span>
                                     """,
                                     unsafe_allow_html=True
                                 )

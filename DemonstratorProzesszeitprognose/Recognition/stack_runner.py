@@ -19,11 +19,11 @@ STATUS = {
     "cam_error": "",
     "variant": "",
     "step_data": None,
+    "bauteile": None
 }
 
 class IPCManager(BaseManager):
     pass
-
 
 IPCManager.register("get_cmd_q", callable=lambda: CMD_Q)
 IPCManager.register("get_status", callable=lambda: STATUS)
@@ -38,6 +38,21 @@ def _serialize_step_data(d: dict) -> dict:
             return {k: conv(v) for k, v in x.items()}
         return x
     return conv(d)
+
+def get_Bauteile(items: list[dict]) -> list[tuple[str, bool]]:
+
+    result: list[tuple[str, bool]] = []
+
+    for it in (items or []):
+        label = it.get("label")
+        if not label:
+            continue  
+
+        erkannt = bool(it.get("detected")) and bool(it.get("ok"))
+        result.append((label, erkannt))
+
+    return result
+    
 
 def main():
     parser = argparse.ArgumentParser()
@@ -75,11 +90,12 @@ def main():
 
         STATUS["variant"] = args.variant
         STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())
+        STATUS["bauteile"] = []
         STATUS["error"] = ""
         
         stop_loop = False
         while True:
-            # --- Commands der Queue abarbeiten ---
+            # Commands der Queue abarbeiten 
             try:
                 while True:
                     cmd = CMD_Q.get_nowait()
@@ -99,7 +115,7 @@ def main():
             if stop_loop:
                 break
 
-            # --- Frame Check ---
+            # Frame Check 
             frame, ready = checker.check() 
             STATUS["step_data"] = _serialize_step_data(checker.collect_step_data())  
             if frame is None:
@@ -117,12 +133,8 @@ def main():
                 STATUS.pop("no_frame_since", None)
                 STATUS["cam_state"] = "ok"
                 STATUS["cam_error"] = ""
-
-            # variant, = checker.collect_step_data()
-
-            # STATUS["variant"] = str(variant)
-            # variant       = str(state["variant"])
-            #        Liste von dicts
+                if not ready:
+                    STATUS["bauteile"] = get_Bauteile(checker.collect_step_data()["items"]) 
 
             STATUS["ready"] = bool(ready)
             STATUS["step"] = int(checker.current_step)
