@@ -37,14 +37,14 @@ def arbeitsplatz_page():
         m.connect()
         return m
 
-    def start_runner(variant="v1", camera="0"):
+    def start_runner(variant="v1", camera="1"):
         proc = st.session_state.get("proc")
         if proc is not None and proc.poll() is None:
             print("Runner läuft schon – starte keinen zweiten.")
         else:
             ROOT = Path(__file__).resolve().parents[1]  
             RUNNER = ROOT / "Recognition" / "stack_runner.py"
-            MODEL  = ROOT / "Recognition" / "best_yolo_small.pt"
+            MODEL  = ROOT / "Recognition" / "HatTimgekocht_.pt"
 
             log_path = ROOT / "stack_runner.log"
             log_f = open(log_path, "a", encoding="utf-8")
@@ -132,24 +132,25 @@ def arbeitsplatz_page():
         mapping = {
             "Box": "Box",
 
-            "cable ending": "Kabelende",
-            "big cable ending": "Großes Kabelende",
+            "cable ending": "Kabel mit kleinem Kabelende",
+            "big cable ending": "Kabel mit großem Kabelende",
 
-            "cable input": "Kabeleingang",
-            "yellow_cable_input": "Eingang gelbes Kabel",
+            "cable input": "Kabel",
+            "cable input2": "Kabel",
+            "yellow_cable_input": "Eingang gelb-grünes Kabel",
 
-            "yellow module": "Gelbes Modul",
-            "Blue Module": "Blaues Modul",
-            "small gray module": "Kleines graues Modul",
-            "big gray module": "Großes graues Modul",
-            "gray orange module": "Grau-oranges Modul",
-            "black module": "Schwarzes Modul",
+            "yellow module": "Gelbe Klemme",
+            "Blue Module": "Blaue Klemme",
+            "small gray module": "Mittelgroße graue Klemme",
+            "big gray module": "Kleine graue Klemme",
+            "gray orange module": "Graue Klemme",
+            "black module": "Schwarzer Spannungsableiter-Block",
 
             "35mm": "35-mm Platzhalter",
 
-            "groin": "Schiene",
+            "groin": "Klemmenleiste",
             "screw": "Schraube",
-            "round gray thing": "Rundes graues Teil",
+            "round gray thing": "Kabelverschraubung",
         }
 
         return mapping.get(label, label)
@@ -881,7 +882,7 @@ def arbeitsplatz_page():
                     with st.container(border=True):
                         timer_ph = st.empty()
                         # Timer/Countdown mit st.fragment live anzeigen
-                        @st.fragment(run_every=0.5)
+                        @st.fragment(run_every=0.8)
                         def render_timer():
 
                             # Game_mode: Timer

@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 
 def main():
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
 
     if not cap.isOpened():
         print("Kamera konnte nicht geöffnet werden.")
